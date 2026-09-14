@@ -92,14 +92,22 @@ export function requireAuth(req: AuthenticatedRequest, res: Response, next: Next
     token = String(req.headers['x-auth-token']).trim();
   }
 
+  const anyRes = res as any;
+  if (!anyRes.status) {
+    anyRes.status = function(code: number) { this.statusCode = code; return this; };
+  }
+  if (!anyRes.json) {
+    anyRes.json = function(data: any) { this.setHeader('Content-Type', 'application/json'); this.end(JSON.stringify(data)); return this; };
+  }
+
   if (!token) {
-    res.status(401).json({ error: 'לא מחובר. אנא התחבר כדי להמשיך.' });
+    anyRes.status(401).json({ error: 'לא מחובר. אנא התחבר כדי להמשיך.' });
     return;
   }
 
   const user = getUserBySession(token);
   if (!user) {
-    res.status(401).json({ error: 'פג תוקף ההתחברות. אנא התחבר מחדש.' });
+    anyRes.status(401).json({ error: 'פג תוקף ההתחברות. אנא התחבר מחדש.' });
     return;
   }
 

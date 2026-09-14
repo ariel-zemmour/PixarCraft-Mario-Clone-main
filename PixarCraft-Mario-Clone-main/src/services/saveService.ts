@@ -23,7 +23,9 @@ export function createDefaultSave(): GameSaveData {
       totalCoinsEarned: 0,
       enemiesDefeated: 0,
       gamesPlayed: 0,
-      wins: 0
+      wins: 0,
+      bossDefeated: false,
+      bossDefeatsCount: 0
     },
     saveVersion: 1,
     updatedAt: new Date().toISOString()

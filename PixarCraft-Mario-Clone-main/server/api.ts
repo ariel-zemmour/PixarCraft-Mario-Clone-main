@@ -12,6 +12,25 @@ import {
 } from './auth';
 
 export const apiRouter = express.Router();
+
+// Response compatibility middleware for Vite Connect integration
+apiRouter.use((req: any, res: any, next: any) => {
+  if (!res.status) {
+    res.status = function(code: number) {
+      this.statusCode = code;
+      return this;
+    };
+  }
+  if (!res.json) {
+    res.json = function(data: any) {
+      this.setHeader('Content-Type', 'application/json');
+      this.end(JSON.stringify(data));
+      return this;
+    };
+  }
+  next();
+});
+
 apiRouter.use(express.json());
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

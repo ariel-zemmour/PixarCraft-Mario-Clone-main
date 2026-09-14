@@ -19,6 +19,8 @@ export interface GameStats {
   enemiesDefeated: number;
   gamesPlayed: number;
   wins: number;
+  bossDefeated?: boolean;
+  bossDefeatsCount?: number;
 }
 
 export interface GameSaveData {

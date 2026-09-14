@@ -17,6 +17,7 @@ import { AuthModal } from './components/AuthModal';
 import { ConflictModal } from './components/ConflictModal';
 import { UserMenu } from './components/UserMenu';
 import { SaveIndicator } from './components/SaveIndicator';
+import { VictoryModal } from './components/VictoryModal';
 
 // --- Weapon Definitions ---
 interface WeaponInfo {
@@ -75,14 +76,18 @@ interface Player extends Rect {
   airplaneTimer: number;
 }
 
+const ALL_ENEMIES: EnemyType[] = ['slimes', 'zombies', 'rabbits', 'ghosts', 'skeletons', 'creepers'];
+
 interface Bullet extends Rect {
   vx: number;
   vy: number;
   isFireball?: boolean;
+  subType?: EnemyType;
 }
 
 interface Entity extends Rect {
   type: string;
+  subType?: EnemyType;
   vx?: number;
   vy?: number;
   collected?: boolean;
@@ -90,6 +95,53 @@ interface Entity extends Rect {
   timer?: number;
   state?: string;
   health?: number;
+}
+
+interface Boss extends Rect {
+  active: boolean;
+  introTimer: number;
+  introComplete: boolean;
+  name: string;
+  maxHealth: number;
+  health: number;
+  displayHealth: number;
+  phase: 1 | 2 | 3;
+  phaseBannerTimer: number;
+  phaseBannerText: string;
+  vx: number;
+  vy: number;
+  baseY: number;
+  hoverAngle: number;
+  attackTimer: number;
+  currentAttack: 'idle' | 'barrage' | 'slam' | 'meteor' | 'shield';
+  attackStateTimer: number;
+  telegraphTimer: number;
+  telegraphType?: 'slam' | 'meteor' | 'barrage';
+  slamTargetX?: number;
+  slamGroundY?: number;
+  shieldActive: boolean;
+  shieldTimer: number;
+  hitFlash: number;
+  dead: boolean;
+  deathTimer: number;
+}
+
+interface BossProjectile extends Rect {
+  type: 'orb' | 'shockwave' | 'meteor';
+  vx: number;
+  vy: number;
+  targetX?: number;
+  targetY?: number;
+  telegraphTimer?: number;
+}
+
+interface ArenaBarrier {
+  x: number;
+  locked: boolean;
+  minCameraX: number;
+  maxCameraX: number;
+  arenaStartX: number;
+  arenaEndX: number;
 }
 
 export default function App() {
@@ -146,6 +198,28 @@ export default function App() {
     wins: 0
   });
   
+  // Dynamic Spawner & Wave Tracking Ref
+  const spawnerRef = useRef<{
+    lastSpawnTime: number;
+    checkpointWavesTriggered: Set<number>;
+    lastAmbushX: number;
+  }>({
+    lastSpawnTime: 0,
+    checkpointWavesTriggered: new Set(),
+    lastAmbushX: 0
+  });
+  
+  // Boss State Refs & Victory Modal State
+  const bossRef = useRef<Boss | null>(null);
+  const bossProjectilesRef = useRef<BossProjectile[]>([]);
+  const arenaBarrierRef = useRef<ArenaBarrier | null>(null);
+  const [victoryModalOpen, setVictoryModalOpen] = useState(false);
+  const [victoryRewards, setVictoryRewards] = useState<{
+    coins: number;
+    score: number;
+    unlockedWeapon?: string;
+  }>({ coins: 10000, score: 25000, unlockedWeapon: 'נשק האלים (w20)' });
+  
   // Sync currencyRef with initial state
   useEffect(() => {
     currencyRef.current = currency;
@@ -165,7 +239,9 @@ export default function App() {
         totalCoinsEarned: statsRef.current.totalCoinsEarned,
         enemiesDefeated: statsRef.current.enemiesDefeated,
         gamesPlayed: statsRef.current.gamesPlayed,
-        wins: statsRef.current.wins
+        wins: statsRef.current.wins,
+        bossDefeated: statsRef.current.bossDefeated || false,
+        bossDefeatsCount: statsRef.current.bossDefeatsCount || 0
       },
       saveVersion: 1,
       updatedAt: new Date().toISOString()
@@ -188,7 +264,9 @@ export default function App() {
         totalCoinsEarned: save.stats.totalCoinsEarned || 0,
         enemiesDefeated: save.stats.enemiesDefeated || 0,
         gamesPlayed: save.stats.gamesPlayed || 0,
-        wins: save.stats.wins || 0
+        wins: save.stats.wins || 0,
+        bossDefeated: save.stats.bossDefeated || false,
+        bossDefeatsCount: save.stats.bossDefeatsCount || 0
       };
     }
     saveService.setLocalSave(save);
@@ -287,12 +365,29 @@ export default function App() {
     heartsRef.current = [];
     enemiesRef.current = [];
     checkpointsRef.current = [];
+    bossRef.current = null;
+    bossProjectilesRef.current = [];
+    arenaBarrierRef.current = null;
     
+    // Reset dynamic enemy spawner
+    spawnerRef.current = {
+      lastSpawnTime: Date.now(),
+      checkpointWavesTriggered: new Set(),
+      lastAmbushX: 0
+    };
+
     // Seeded random for consistent map generation
     let seed = level * 1234567;
     const nextRandom = () => {
       const x = Math.sin(seed++) * 10000;
       return x - Math.floor(x);
+    };
+
+    // Helper to naturally mix enemy types with player preference
+    const getPlatformEnemyType = (rnd: number): EnemyType => {
+      if (rnd < 0.65) return config.enemy;
+      const otherEnemies = ALL_ENEMIES.filter(e => e !== config.enemy);
+      return otherEnemies[Math.floor(rnd * 100) % otherEnemies.length];
     };
 
     // Start platform
@@ -307,6 +402,7 @@ export default function App() {
       const gap = isLevel2 ? 100 + nextRandom() * 180 : 50 + nextRandom() * 120;
       const platW = isLevel2 ? 150 + nextRandom() * 300 : 250 + nextRandom() * 400;
       const platY = 200 + nextRandom() * 150;
+      const progressFraction = currentX / targetX;
       
       currentX += gap;
       platformsRef.current.push({ x: currentX, y: platY, w: platW, h: 50 });
@@ -337,8 +433,40 @@ export default function App() {
         });
       }
       
-      if (nextRandom() > (isLevel2 ? 0.4 : 0.6)) {
-        enemiesRef.current.push({ x: currentX + platW/2, y: platY - 30, w: 30, h: 30, type: 'enemy', vx: (nextRandom() > 0.5 ? 1 : -1) * (isLevel2 ? 2.5 : 1.5) });
+      // --- Significantly Increased Enemy Generation ---
+      // 85% chance on Level 1, 95% chance on Level 2
+      const spawnChance = isLevel2 ? 0.95 : 0.85;
+      if (nextRandom() < spawnChance) {
+        // Platform capacity: 1-2 on short, 2-3 on medium, 3-4 on wide platforms
+        let count = platW < 220 ? (nextRandom() > 0.4 ? 2 : 1) : platW < 360 ? (nextRandom() > 0.3 ? 3 : 2) : 3 + (nextRandom() > 0.5 ? 1 : 0);
+        // Gradually increase enemies further into the level
+        if (progressFraction > 0.5 && nextRandom() > 0.4) {
+          count = Math.min(4, count + 1);
+        }
+
+        for (let ei = 0; ei < count; ei++) {
+          const eRnd = nextRandom();
+          const enemyType = getPlatformEnemyType(eRnd);
+          const isFlying = enemyType === 'ghosts';
+          const spacing = (platW - 40) / Math.max(1, count);
+          const enemyX = currentX + 20 + ei * spacing;
+          const enemyY = isFlying ? platY - 65 - (ei * 15) : platY - 30;
+          const speedMultiplier = (isLevel2 ? 1.3 : 1.0) * (1 + progressFraction * 0.25);
+          const patrolDirection = nextRandom() > 0.5 ? 1 : -1;
+
+          enemiesRef.current.push({
+            x: enemyX,
+            y: enemyY,
+            w: 30,
+            h: 30,
+            type: 'enemy',
+            subType: enemyType,
+            vx: patrolDirection * (enemyType === 'creepers' ? 1.6 : 2.0) * speedMultiplier,
+            vy: isFlying ? (nextRandom() - 0.5) : 0,
+            timer: nextRandom() * 1000,
+            state: 'patrol'
+          });
+        }
       }
       
       if (nextRandom() > (isLevel2 ? 0.5 : 0.7) && platW > 200) {
@@ -356,16 +484,129 @@ export default function App() {
       currentX += platW;
     }
     
-    // Goal
-    const lastPlatY = platformsRef.current[platformsRef.current.length - 1].y;
-    goalRef.current = { x: currentX, y: lastPlatY - 100, w: 60, h: 100 };
-    platformsRef.current.push({ x: currentX - 100, y: lastPlatY, w: 300, h: 50 }); // Safe platform for goal
+    // Level End & Boss Arena Generation
+    if (level === 1) {
+      // Level 1: Goal Flag & Guardian Squad
+      const lastPlatY = platformsRef.current[platformsRef.current.length - 1].y;
+      goalRef.current = { x: currentX, y: lastPlatY - 100, w: 60, h: 100 };
+      platformsRef.current.push({ x: currentX - 100, y: lastPlatY, w: 300, h: 50 }); // Safe platform for goal
+
+      for (let gi = 0; gi < 4; gi++) {
+        const gType = ALL_ENEMIES[gi % ALL_ENEMIES.length];
+        enemiesRef.current.push({
+          x: currentX - 90 + gi * 40,
+          y: gType === 'ghosts' ? lastPlatY - 70 : lastPlatY - 30,
+          w: 30,
+          h: 30,
+          type: 'enemy',
+          subType: gType,
+          vx: (gi % 2 === 0 ? 1.5 : -1.5),
+          vy: 0,
+          timer: 0,
+          state: 'patrol'
+        });
+      }
+    } else {
+      // Level 2: The Final Boss Arena (Obsidian Citadel of the Shadow Titan)
+      const arenaStartX = currentX + 60;
+      const arenaY = 350;
+
+      // Main Arena Floor (solid 1400px obsidian)
+      platformsRef.current.push({ x: arenaStartX, y: arenaY, w: 1400, h: 60 });
+
+      // Tactical elevated platforms for maneuvering and jump shooting
+      platformsRef.current.push({ x: arenaStartX + 180, y: 230, w: 160, h: 25 });
+      platformsRef.current.push({ x: arenaStartX + 480, y: 160, w: 200, h: 25 });
+      platformsRef.current.push({ x: arenaStartX + 820, y: 230, w: 160, h: 25 });
+
+      // Arena Entrance Checkpoint (allows player to respawn right at the boss gates)
+      checkpointsRef.current.push({
+        x: arenaStartX + 40,
+        y: arenaY - 60,
+        w: 40,
+        h: 60,
+        type: 'checkpoint',
+        collected: true
+      });
+      lastCheckpointRef.current = { x: arenaStartX + 50, y: arenaY - 60 };
+
+      // Goal flag (at the far end of the arena)
+      goalRef.current = { x: arenaStartX + 1250, y: arenaY - 100, w: 60, h: 100 };
+
+      // Arena barrier bounds
+      arenaBarrierRef.current = {
+        x: arenaStartX + 70,
+        locked: false,
+        minCameraX: arenaStartX,
+        maxCameraX: arenaStartX + 600,
+        arenaStartX,
+        arenaEndX: arenaStartX + 1400
+      };
+
+      // Final Boss Entity
+      bossRef.current = {
+        x: arenaStartX + 720,
+        y: 120,
+        w: 80,
+        h: 90,
+        active: false,
+        introTimer: 0,
+        introComplete: false,
+        name: 'טיטאן הצללים',
+        maxHealth: 3000,
+        health: 3000,
+        displayHealth: 3000,
+        phase: 1,
+        phaseBannerTimer: 0,
+        phaseBannerText: '',
+        vx: 0,
+        vy: 0,
+        baseY: 130,
+        hoverAngle: 0,
+        attackTimer: 2500,
+        currentAttack: 'idle',
+        attackStateTimer: 0,
+        telegraphTimer: 0,
+        shieldActive: false,
+        shieldTimer: 0,
+        hitFlash: 0,
+        dead: false,
+        deathTimer: 0
+      };
+    }
   };
 
   const handleDeath = () => {
     keysRef.current = {}; // Clear stuck keys
     livesRef.current -= 1;
     
+    // Clear any active boss projectiles
+    bossProjectilesRef.current = [];
+
+    // Reset boss if fighting in arena
+    if (bossRef.current) {
+      bossRef.current.active = false;
+      bossRef.current.health = bossRef.current.maxHealth;
+      bossRef.current.displayHealth = bossRef.current.maxHealth;
+      bossRef.current.phase = 1;
+      bossRef.current.phaseBannerTimer = 0;
+      bossRef.current.currentAttack = 'idle';
+      bossRef.current.attackTimer = 2200;
+      bossRef.current.attackStateTimer = 0;
+      bossRef.current.telegraphTimer = 0;
+      bossRef.current.shieldActive = false;
+      bossRef.current.dead = false;
+      bossRef.current.deathTimer = 0;
+      bossRef.current.hitFlash = 0;
+      bossRef.current.introComplete = false;
+    }
+    if (arenaBarrierRef.current) {
+      arenaBarrierRef.current.locked = false;
+    }
+
+    // Give player brief breathing room on respawn before new waves spawn
+    spawnerRef.current.lastSpawnTime = Date.now() + 2000;
+
     // Sync currency to state and save on death to ensure it's persisted
     setCurrency(currencyRef.current);
     saveService.saveNow(getCurrentSaveSnapshot());
@@ -634,6 +875,48 @@ export default function App() {
           break;
         }
       }
+      
+      // Boss hit collision
+      if (!hit && bossRef.current && bossRef.current.active && !bossRef.current.dead && bossRef.current.introComplete) {
+        const boss = bossRef.current;
+        if (checkCollision(b, boss)) {
+          hit = true;
+          if (boss.shieldActive) {
+            smokeParticlesRef.current.push({
+              x: b.x,
+              y: b.y,
+              vx: (Math.random() - 0.5) * 4,
+              vy: -2,
+              timer: 0,
+              size: 6,
+              opacity: 0.8
+            });
+          } else {
+            const dmg = b.isFireball ? 45 : 20;
+            boss.health = Math.max(0, boss.health - dmg);
+            boss.hitFlash = 120;
+            scoreRef.current += 25;
+            for (let sp = 0; sp < 4; sp++) {
+              smokeParticlesRef.current.push({
+                x: b.x,
+                y: b.y,
+                vx: (Math.random() - 0.5) * 5,
+                vy: (Math.random() - 0.5) * 5,
+                timer: 0,
+                size: 4 + Math.random() * 3,
+                opacity: 0.9
+              });
+            }
+            if (boss.health <= 0) {
+              boss.dead = true;
+              boss.deathTimer = 2500;
+              boss.shieldActive = false;
+              bossProjectilesRef.current = [];
+            }
+          }
+        }
+      }
+
       if (hit) {
         bulletsRef.current.splice(i, 1);
       }
@@ -656,26 +939,170 @@ export default function App() {
       }
     }
     
+    // Arena Barrier Boundary & Boss Trigger
+    const arena = arenaBarrierRef.current;
+    if (arena && levelRef.current === 2) {
+      if (!arena.locked && p.x > arena.arenaStartX + 120 && bossRef.current && !bossRef.current.dead) {
+        arena.locked = true;
+        bossRef.current.active = true;
+        bossRef.current.introTimer = 2200;
+        bossRef.current.introComplete = false;
+      }
+      if (arena.locked) {
+        if (p.x < arena.x + 10) {
+          p.x = arena.x + 10;
+          if (p.vx < 0) p.vx = 0;
+        }
+        if (p.x > arena.arenaEndX - 40) {
+          p.x = arena.arenaEndX - 40;
+          if (p.vx > 0) p.vx = 0;
+        }
+      }
+    }
+
+    // --- Dynamic Continuous Enemy Wave Spawner & Ambush System ---
+    const now = Date.now();
+    const isLevel2 = levelRef.current === 2;
+    const targetX = isLevel2 ? 80000 : 40000;
+    const progress = Math.min(1, Math.max(0, p.x / targetX));
+    const isInsideArena = arena && arena.locked;
+
+    // Routine dynamic wave spawn (only outside the boss arena)
+    const waveInterval = (isLevel2 ? 2800 : 4200) * (1 - progress * 0.25);
+    const maxLocalEnemies = isLevel2 ? 24 : 15;
+    const localEnemiesCount = enemiesRef.current.filter(
+      e => !e.dead && Math.abs(e.x - p.x) < 1100
+    ).length;
+
+    if (!isInsideArena && now - spawnerRef.current.lastSpawnTime > waveInterval && localEnemiesCount < maxLocalEnemies) {
+      spawnerRef.current.lastSpawnTime = now;
+      const waveSize = (isLevel2 ? 3 : 2) + (Math.random() > 0.4 ? 1 : 0) + (progress > 0.6 && Math.random() > 0.5 ? 1 : 0);
+      
+      for (let i = 0; i < waveSize; i++) {
+        const rnd = Math.random();
+        const eType: EnemyType = rnd < 0.6 ? config.enemy : ALL_ENEMIES[Math.floor(Math.random() * ALL_ENEMIES.length)];
+        const isGhost = eType === 'ghosts';
+        
+        // 80% spawn ahead of screen, 20% rear ambush
+        const spawnAhead = Math.random() > 0.2;
+        const spawnX = spawnAhead 
+          ? cameraRef.current.x + 850 + Math.random() * 200 + i * 40
+          : cameraRef.current.x - 50 - Math.random() * 100 - i * 40;
+        
+        let spawnY = p.y - 20;
+        const nearbyPlat = platformsRef.current.find(plat => spawnX >= plat.x - 30 && spawnX <= plat.x + plat.w + 30);
+        if (nearbyPlat) {
+          spawnY = isGhost ? nearbyPlat.y - 70 : nearbyPlat.y - 30;
+        } else if (isGhost) {
+          spawnY = Math.max(100, Math.min(320, p.y + (Math.random() * 120 - 60)));
+        } else {
+          let closestDist = Infinity;
+          let bestPlat = platformsRef.current[0];
+          for (const plat of platformsRef.current) {
+            const dist = Math.abs((plat.x + plat.w / 2) - spawnX);
+            if (dist < closestDist) {
+              closestDist = dist;
+              bestPlat = plat;
+            }
+          }
+          if (bestPlat && closestDist < 600) {
+            spawnY = bestPlat.y - 30;
+          }
+        }
+
+        const patrolDir = spawnAhead ? -1 : 1;
+        const speedMultiplier = (isLevel2 ? 1.25 : 1.0) * (1 + progress * 0.2);
+        enemiesRef.current.push({
+          x: spawnX,
+          y: spawnY,
+          w: 30,
+          h: 30,
+          type: 'enemy',
+          subType: eType,
+          vx: patrolDir * (eType === 'creepers' ? 1.8 : 2.2) * speedMultiplier,
+          vy: 0,
+          timer: Math.random() * 1000,
+          state: 'patrol'
+        });
+      }
+    }
+
+    // Checkpoint Ambush Waves (triggered when player approaches a checkpoint)
+    checkpointsRef.current.forEach((cp, idx) => {
+      if (Math.abs(cp.x - p.x) < 250 && !spawnerRef.current.checkpointWavesTriggered.has(idx)) {
+        spawnerRef.current.checkpointWavesTriggered.add(idx);
+        const ambushCount = isLevel2 ? 4 : 3;
+        for (let a = 0; a < ambushCount; a++) {
+          const ambType = ALL_ENEMIES[(idx + a) % ALL_ENEMIES.length];
+          const ambX = a % 2 === 0 ? cp.x - 120 - a * 35 : cp.x + 120 + a * 35;
+          const ambY = ambType === 'ghosts' ? cp.y - 45 : cp.y + 20;
+          enemiesRef.current.push({
+            x: ambX,
+            y: ambY,
+            w: 30,
+            h: 30,
+            type: 'enemy',
+            subType: ambType,
+            vx: (a % 2 === 0 ? 1 : -1) * (isLevel2 ? 2.5 : 2.0),
+            vy: 0,
+            timer: 0,
+            state: 'patrol'
+          });
+        }
+      }
+    });
+
+    // Goal Guardian Ambush (spawns when player approaches within 750px of the goal)
+    if (p.x > goalRef.current.x - 750 && spawnerRef.current.lastAmbushX < goalRef.current.x - 1000) {
+      spawnerRef.current.lastAmbushX = goalRef.current.x;
+      const guardianWaveCount = isLevel2 ? 6 : 4;
+      for (let g = 0; g < guardianWaveCount; g++) {
+        const gType = ALL_ENEMIES[g % ALL_ENEMIES.length];
+        enemiesRef.current.push({
+          x: goalRef.current.x - 280 + g * 50,
+          y: gType === 'ghosts' ? goalRef.current.y - 30 : goalRef.current.y + 40,
+          w: 30,
+          h: 30,
+          type: 'enemy',
+          subType: gType,
+          vx: (g % 2 === 0 ? -1.8 : -2.4) * (isLevel2 ? 1.3 : 1.0),
+          vy: 0,
+          timer: 0,
+          state: 'patrol'
+        });
+      }
+    }
+
+    // Performance Culling:
+    // Remove dead enemies or enemies farther than 800px behind camera to maintain optimal 60 FPS
+    if (enemiesRef.current.length > 25) {
+      enemiesRef.current = enemiesRef.current.filter(
+        e => !e.dead && (e.x >= cameraRef.current.x - 800)
+      );
+    }
+    
     // Enemies update
     enemiesRef.current.forEach(enemy => {
       if (enemy.dead) return;
       if (Math.abs(enemy.x - p.x) > 2000) return;
 
-      if (config.enemy === 'ghosts') {
+      const eType = (enemy.subType || config.enemy) as EnemyType;
+
+      if (eType === 'ghosts') {
         // Ghosts fly towards player
         const dx = p.x - enemy.x;
         const dy = p.y - enemy.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist < 400) {
-          enemy.vx = (dx / dist) * 1.5;
-          enemy.vy = (dy / dist) * 1.5;
+          enemy.vx = (dx / dist) * (isLevel2 ? 2.0 : 1.5);
+          enemy.vy = (dy / dist) * (isLevel2 ? 2.0 : 1.5);
         } else {
           enemy.vx = 0;
           enemy.vy = 0;
         }
         enemy.x += enemy.vx;
         enemy.y += enemy.vy;
-      } else if (config.enemy === 'skeletons') {
+      } else if (eType === 'skeletons') {
         // Skeletons patrol and shoot
         enemy.x += enemy.vx || 0;
         let hitWall = false;
@@ -689,30 +1116,31 @@ export default function App() {
 
         // Shooting logic
         enemy.timer = (enemy.timer || 0) + 16;
-        if (enemy.timer > 2000) {
+        if (enemy.timer > (isLevel2 ? 1500 : 2000)) {
           enemy.timer = 0;
           const dx = p.x - enemy.x;
-          if (Math.abs(dx) < 500) {
+          if (Math.abs(dx) < 550) {
             enemyBulletsRef.current.push({
               x: enemy.x + enemy.w / 2,
               y: enemy.y + 10,
               w: 15,
               h: 4,
               vx: dx > 0 ? 5 : -5,
-              vy: 0
+              vy: 0,
+              subType: 'skeletons'
             });
           }
         }
-      } else if (config.enemy === 'creepers') {
+      } else if (eType === 'creepers') {
         // Creepers charge when player is close
         const dx = p.x - enemy.x;
         const dist = Math.abs(dx);
-        if (dist < 250 && Math.abs(p.y - enemy.y) < 100) {
-          enemy.vx = (dx > 0 ? 3.5 : -3.5);
+        if (dist < 280 && Math.abs(p.y - enemy.y) < 120) {
+          enemy.vx = (dx > 0 ? 3.8 : -3.8) * (isLevel2 ? 1.25 : 1.0);
           enemy.state = 'charging';
         } else {
           if (enemy.state === 'charging') {
-            enemy.vx = (enemy.vx || 0) > 0 ? 1.5 : -1.5;
+            enemy.vx = (enemy.vx || 0) > 0 ? 1.6 : -1.6;
             enemy.state = 'patrol';
           }
           enemy.x += enemy.vx || 0;
@@ -729,7 +1157,7 @@ export default function App() {
           enemy.x += enemy.vx || 0;
         }
       } else {
-        // Simple patrol for others
+        // Simple patrol for others (slimes, zombies, rabbits)
         enemy.x += enemy.vx || 0;
         let hitWall = false;
         for (const plat of platformsRef.current) {
@@ -743,7 +1171,7 @@ export default function App() {
       
       // Player collision
       if (checkCollision(p, enemy)) {
-        if (p.vy > 0 && p.y + p.h < enemy.y + 15 && config.enemy !== 'ghosts') {
+        if (p.vy > 0 && p.y + p.h < enemy.y + 15 && eType !== 'ghosts') {
           // Stomp
           enemy.dead = true;
           p.vy = JUMP_FORCE * 0.8;
@@ -755,6 +1183,296 @@ export default function App() {
         }
       }
     });
+    
+    // --- Final Boss AI & Combat Logic ---
+    const boss = bossRef.current;
+    if (boss && boss.active) {
+      if (boss.dead) {
+        // Boss Defeat Exploding Animation
+        boss.deathTimer -= 16;
+        if (Math.random() > 0.25) {
+          muzzleFlashesRef.current.push({
+            x: boss.x + Math.random() * boss.w,
+            y: boss.y + Math.random() * boss.h,
+            timer: 0,
+            size: 25 + Math.random() * 25,
+            angle: Math.random() * Math.PI * 2
+          });
+        }
+        if (boss.deathTimer <= 0) {
+          boss.active = false;
+          // Grant Epic Rewards!
+          const earnedCoins = 10000;
+          const earnedScore = 25000;
+          currencyRef.current += earnedCoins;
+          setCurrency(currencyRef.current);
+          scoreRef.current += earnedScore;
+
+          // Unlock legendary weapon 'w20' ('נשק האלים')
+          let unlockedName: string | undefined;
+          if (!unlockedWeapons.includes('w20')) {
+            const nextWeapons = [...unlockedWeapons, 'w20' as WeaponType];
+            setUnlockedWeapons(nextWeapons);
+            unlockedName = 'נשק האלים (w20)';
+          } else {
+            unlockedName = 'נשק האלים (כבר ברשותך!)';
+          }
+
+          if (!statsRef.current.completedLevels.includes(2)) {
+            statsRef.current.completedLevels.push(2);
+          }
+          statsRef.current.bossDefeated = true;
+          statsRef.current.bossDefeatsCount = (statsRef.current.bossDefeatsCount || 0) + 1;
+          statsRef.current.wins += 1;
+
+          saveService.saveNow(getCurrentSaveSnapshot());
+
+          setVictoryRewards({
+            coins: earnedCoins,
+            score: earnedScore,
+            unlockedWeapon: unlockedName
+          });
+          setVictoryModalOpen(true);
+          setIsPlaying(false);
+        }
+      } else {
+        // Alive Boss Update
+        if (boss.introTimer > 0) {
+          boss.introTimer -= 16;
+          // Descend majestically from the sky into arena center
+          const introProgress = 1 - Math.max(0, boss.introTimer / 2200);
+          boss.y = -80 + (boss.baseY + 80) * introProgress;
+          if (boss.introTimer <= 0) {
+            boss.introComplete = true;
+          }
+        } else {
+          boss.displayHealth += (boss.health - boss.displayHealth) * 0.08;
+          if (boss.hitFlash > 0) boss.hitFlash -= 16;
+          if (boss.phaseBannerTimer > 0) boss.phaseBannerTimer -= 16;
+
+          // Phase transitions
+          if (boss.health <= boss.maxHealth * 0.3 && boss.phase < 3) {
+            boss.phase = 3;
+            boss.phaseBannerTimer = 2200;
+            boss.phaseBannerText = 'שלב 3: כוח עילאי!';
+            boss.shieldActive = false;
+            boss.currentAttack = 'idle';
+            boss.attackTimer = 1000;
+            // Phase 3 summons 2 shadow minions
+            if (arena) {
+              enemiesRef.current.push({
+                x: arena.arenaStartX + 280,
+                y: 320,
+                w: 30,
+                h: 30,
+                type: 'enemy',
+                subType: 'skeletons',
+                vx: 2.0,
+                vy: 0,
+                timer: 0,
+                state: 'patrol'
+              });
+              enemiesRef.current.push({
+                x: arena.arenaStartX + 950,
+                y: 320,
+                w: 30,
+                h: 30,
+                type: 'enemy',
+                subType: 'creepers',
+                vx: -2.2,
+                vy: 0,
+                timer: 0,
+                state: 'patrol'
+              });
+            }
+          } else if (boss.health <= boss.maxHealth * 0.6 && boss.phase < 2) {
+            boss.phase = 2;
+            boss.phaseBannerTimer = 2200;
+            boss.phaseBannerText = 'שלב 2: זעם אפל!';
+            boss.currentAttack = 'idle';
+            boss.attackTimer = 1200;
+          }
+
+          // Shield timer
+          if (boss.shieldActive) {
+            boss.shieldTimer -= 16;
+            if (boss.shieldTimer <= 0) {
+              boss.shieldActive = false;
+            }
+          }
+
+          // Hover movement
+          boss.hoverAngle += (boss.phase === 3 ? 0.06 : boss.phase === 2 ? 0.05 : 0.035);
+          if (boss.currentAttack !== 'slam') {
+            boss.y = boss.baseY + Math.sin(boss.hoverAngle) * 22;
+            if (arena) {
+              const targetX = Math.max(arena.arenaStartX + 420, Math.min(arena.arenaStartX + 950, p.x + 220));
+              boss.x += (targetX - boss.x) * (boss.phase === 3 ? 0.03 : 0.018);
+            }
+          }
+
+          // Attack Cycle
+          const attackCooldown = boss.phase === 3 ? 1600 : boss.phase === 2 ? 2400 : 3400;
+          if (boss.currentAttack === 'idle') {
+            boss.attackTimer -= 16;
+            if (boss.attackTimer <= 0) {
+              const roll = Math.random();
+              if (boss.phase === 1) {
+                boss.currentAttack = roll < 0.5 ? 'barrage' : 'slam';
+              } else if (boss.phase === 2) {
+                boss.currentAttack = roll < 0.35 ? 'barrage' : roll < 0.65 ? 'slam' : roll < 0.85 ? 'meteor' : 'shield';
+              } else {
+                boss.currentAttack = roll < 0.3 ? 'barrage' : roll < 0.6 ? 'slam' : roll < 0.85 ? 'meteor' : 'shield';
+              }
+              boss.telegraphTimer = boss.currentAttack === 'slam' ? 750 : boss.currentAttack === 'meteor' ? 900 : 600;
+              boss.telegraphType = boss.currentAttack === 'slam' ? 'slam' : boss.currentAttack === 'meteor' ? 'meteor' : 'barrage';
+              if (boss.currentAttack === 'slam') {
+                boss.slamTargetX = p.x;
+                boss.slamGroundY = 350;
+              }
+            }
+          } else if (boss.telegraphTimer > 0) {
+            boss.telegraphTimer -= 16;
+            if (boss.currentAttack === 'slam' && boss.slamTargetX !== undefined) {
+              boss.slamTargetX += (p.x - boss.slamTargetX) * 0.05;
+              boss.x += (boss.slamTargetX - boss.w / 2 - boss.x) * 0.08;
+            }
+          } else {
+            // Execute attack!
+            if (boss.currentAttack === 'barrage') {
+              const count = boss.phase === 1 ? 3 : 5;
+              const angleSpread = 0.55;
+              const baseAngle = Math.atan2((p.y + p.h / 2) - (boss.y + boss.h / 2), (p.x + p.w / 2) - (boss.x + boss.w / 2));
+              for (let a = 0; a < count; a++) {
+                const angle = baseAngle - angleSpread / 2 + (count > 1 ? (a / (count - 1)) * angleSpread : 0);
+                const spd = boss.phase === 3 ? 6.5 : 5.0;
+                bossProjectilesRef.current.push({
+                  x: boss.x + boss.w / 2 - 10,
+                  y: boss.y + boss.h / 2 - 10,
+                  w: 18,
+                  h: 18,
+                  type: 'orb',
+                  vx: Math.cos(angle) * spd,
+                  vy: Math.sin(angle) * spd
+                });
+              }
+              boss.currentAttack = 'idle';
+              boss.attackTimer = attackCooldown;
+            } else if (boss.currentAttack === 'slam') {
+              boss.y += 14;
+              if (boss.y + boss.h >= (boss.slamGroundY || 350)) {
+                boss.y = (boss.slamGroundY || 350) - boss.h;
+                // Floor shockwaves running left and right
+                bossProjectilesRef.current.push({
+                  x: boss.x - 25,
+                  y: 328,
+                  w: 30,
+                  h: 24,
+                  type: 'shockwave',
+                  vx: -(boss.phase === 3 ? 7.0 : 5.5),
+                  vy: 0
+                });
+                bossProjectilesRef.current.push({
+                  x: boss.x + boss.w,
+                  y: 328,
+                  w: 30,
+                  h: 24,
+                  type: 'shockwave',
+                  vx: (boss.phase === 3 ? 7.0 : 5.5),
+                  vy: 0
+                });
+                for (let d = 0; d < 8; d++) {
+                  smokeParticlesRef.current.push({
+                    x: boss.x + boss.w / 2 + (Math.random() - 0.5) * 60,
+                    y: 345,
+                    vx: (Math.random() - 0.5) * 8,
+                    vy: -Math.random() * 4,
+                    timer: 0,
+                    size: 8,
+                    opacity: 0.9
+                  });
+                }
+                boss.currentAttack = 'idle';
+                boss.attackTimer = attackCooldown;
+              }
+            } else if (boss.currentAttack === 'meteor') {
+              const meteorCount = boss.phase === 3 ? 6 : 4;
+              if (arena) {
+                const span = arena.arenaEndX - arena.arenaStartX - 300;
+                for (let m = 0; m < meteorCount; m++) {
+                  const targetX = arena.arenaStartX + 150 + (m / Math.max(1, meteorCount - 1)) * span + (Math.random() * 60 - 30);
+                  bossProjectilesRef.current.push({
+                    x: targetX - 15,
+                    y: -60,
+                    w: 30,
+                    h: 30,
+                    type: 'meteor',
+                    vx: 0,
+                    vy: boss.phase === 3 ? 9.5 : 7.5,
+                    targetX,
+                    targetY: 340,
+                    telegraphTimer: 850
+                  });
+                }
+              }
+              boss.currentAttack = 'idle';
+              boss.attackTimer = attackCooldown;
+            } else if (boss.currentAttack === 'shield') {
+              boss.shieldActive = true;
+              boss.shieldTimer = 2500;
+              boss.currentAttack = 'idle';
+              boss.attackTimer = attackCooldown;
+            }
+          }
+
+          // Direct collision with boss
+          if (checkCollision(p, boss)) {
+            handleDeath();
+          }
+        }
+      }
+    }
+
+    // Boss Projectiles Update & Collision
+    for (let i = bossProjectilesRef.current.length - 1; i >= 0; i--) {
+      const bp = bossProjectilesRef.current[i];
+      if (bp.type === 'meteor') {
+        if (bp.telegraphTimer && bp.telegraphTimer > 0) {
+          bp.telegraphTimer -= 16;
+          continue;
+        }
+        bp.y += bp.vy;
+        if (bp.y >= (bp.targetY || 340)) {
+          bossProjectilesRef.current.splice(i, 1);
+          muzzleFlashesRef.current.push({
+            x: bp.x + bp.w / 2,
+            y: 340,
+            timer: 0,
+            size: 24,
+            angle: 0
+          });
+          if (Math.abs((p.x + p.w / 2) - (bp.x + bp.w / 2)) < 42 && p.y + p.h >= 320) {
+            handleDeath();
+          }
+          continue;
+        }
+      } else {
+        bp.x += bp.vx;
+        bp.y += bp.vy;
+      }
+
+      // Bounds culling
+      if (arena && (bp.x < arena.arenaStartX - 200 || bp.x > arena.arenaEndX + 200 || bp.y > 600)) {
+        bossProjectilesRef.current.splice(i, 1);
+        continue;
+      }
+
+      // Collision with player
+      if (checkCollision(p, bp)) {
+        handleDeath();
+        bossProjectilesRef.current.splice(i, 1);
+      }
+    }
     
     // Collectibles update
     collectiblesRef.current.forEach(c => {
@@ -816,6 +1534,10 @@ export default function App() {
         saveService.saveNow(getCurrentSaveSnapshot());
         initLevel(2, false);
       } else {
+        // Level 2 Goal only passes once Boss is defeated!
+        if (bossRef.current && !bossRef.current.dead) {
+          return;
+        }
         if (!statsRef.current.completedLevels.includes(2)) {
           statsRef.current.completedLevels.push(2);
         }
@@ -824,16 +1546,22 @@ export default function App() {
         setIsPlaying(false);
         setShowConfig(true);
         initLevel(1, true);
-        alert("כל הכבוד! סיימת את המשחק!");
       }
     }
     
     // Camera follow
     cameraRef.current.x = p.x - 400 + p.w / 2;
     if (cameraRef.current.x < 0) cameraRef.current.x = 0;
+    if (arena && arena.locked) {
+      if (cameraRef.current.x < arena.minCameraX) cameraRef.current.x = arena.minCameraX;
+      if (cameraRef.current.x > arena.maxCameraX) cameraRef.current.x = arena.maxCameraX;
+    }
   };
 
   const draw = (ctx: CanvasRenderingContext2D) => {
+    const boss = bossRef.current;
+    const arena = arenaBarrierRef.current;
+
     // Clear & Background
     if (levelRef.current === 1) {
       ctx.fillStyle = '#87CEEB'; // Minecraft sky blue
@@ -1071,14 +1799,15 @@ export default function App() {
     enemiesRef.current.forEach(e => {
       if (e.dead) return;
       if (e.x + e.w < drawStartX || e.x > drawEndX) return;
-      if (config.enemy === 'slimes') {
+      const eType = (e.subType || config.enemy) as EnemyType;
+      if (eType === 'slimes') {
         ctx.fillStyle = 'rgba(0, 255, 0, 0.8)';
         ctx.fillRect(e.x, e.y, e.w, e.h);
         // Eyes
         ctx.fillStyle = 'black';
         ctx.fillRect(e.x + 5, e.y + 5, 5, 5);
         ctx.fillRect(e.x + 20, e.y + 5, 5, 5);
-      } else if (config.enemy === 'zombies') {
+      } else if (eType === 'zombies') {
         // Minecraft Zombie
         ctx.fillStyle = '#00A86B'; // Zombie green
         ctx.fillRect(e.x + 5, e.y, e.w - 10, 15);
@@ -1089,7 +1818,7 @@ export default function App() {
         ctx.fillRect(e.x, e.y + 15, e.w, 10);
         ctx.fillStyle = '#3C44AA'; // Blue pants
         ctx.fillRect(e.x + 2, e.y + 25, e.w - 4, 5);
-      } else if (config.enemy === 'rabbits') {
+      } else if (eType === 'rabbits') {
         // Evil Rabbits
         ctx.fillStyle = 'white';
         ctx.beginPath();
@@ -1103,7 +1832,7 @@ export default function App() {
         ctx.fillStyle = 'red';
         ctx.fillRect(e.x + 8, e.y + 18, 3, 3);
         ctx.fillRect(e.x + 19, e.y + 18, 3, 3);
-      } else if (config.enemy === 'ghosts') {
+      } else if (eType === 'ghosts') {
         // Ghosts
         ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
         ctx.beginPath();
@@ -1121,7 +1850,7 @@ export default function App() {
         ctx.arc(e.x + e.w/2 - 5, e.y + e.h/2 - 2, 3, 0, Math.PI * 2);
         ctx.arc(e.x + e.w/2 + 5, e.y + e.h/2 - 2, 3, 0, Math.PI * 2);
         ctx.fill();
-      } else if (config.enemy === 'skeletons') {
+      } else if (eType === 'skeletons') {
         // Skeletons
         ctx.fillStyle = '#E0E0E0';
         ctx.fillRect(e.x + 5, e.y, e.w - 10, 15); // Head
@@ -1135,7 +1864,7 @@ export default function App() {
         ctx.beginPath();
         ctx.arc(e.x + (e.vx! > 0 ? e.w : 0), e.y + 15, 10, -Math.PI/2, Math.PI/2);
         ctx.stroke();
-      } else if (config.enemy === 'creepers') {
+      } else if (eType === 'creepers') {
         // Creepers
         ctx.fillStyle = e.state === 'charging' ? '#FF0000' : '#00FF00';
         ctx.fillRect(e.x + 5, e.y, e.w - 10, 15); // Head
@@ -1151,7 +1880,7 @@ export default function App() {
 
     // Draw Enemy Bullets
     enemyBulletsRef.current.forEach(b => {
-      ctx.fillStyle = config.enemy === 'skeletons' ? '#A0A0A0' : '#FF0000';
+      ctx.fillStyle = (b.subType || config.enemy) === 'skeletons' ? '#A0A0A0' : '#FF0000';
       ctx.fillRect(b.x, b.y, b.w, b.h);
     });
     
@@ -1310,16 +2039,281 @@ export default function App() {
       ctx.restore();
     }
 
-    // Draw Goal
-    ctx.fillStyle = levelRef.current === 1 ? '#00FF00' : '#FF00FF';
-    ctx.fillRect(goalRef.current.x, goalRef.current.y, goalRef.current.w, goalRef.current.h);
-    ctx.fillStyle = 'white';
-    ctx.font = 'bold 16px Arial';
-    ctx.fillText('סיום!', goalRef.current.x + 10, goalRef.current.y + 50);
+    // Arena Barrier & Posts (World Space)
+    if (arena) {
+      ctx.fillStyle = arena.locked ? 'rgba(255, 0, 85, 0.65)' : 'rgba(0, 255, 200, 0.35)';
+      ctx.fillRect(arena.x - 6, 0, 12, 400);
+      ctx.fillStyle = '#1A0033';
+      ctx.fillRect(arena.x - 14, 180, 28, 170);
+      ctx.strokeStyle = arena.locked ? '#FF0055' : '#00FFFF';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(arena.x - 6, 0, 12, 400);
+    }
+
+    // Boss Telegraph Visuals (World Space)
+    if (boss && boss.active && !boss.dead && boss.telegraphTimer > 0) {
+      if (boss.telegraphType === 'slam' && boss.slamTargetX !== undefined) {
+        const beamAlpha = 0.3 + Math.sin(Date.now() / 70) * 0.25;
+        ctx.fillStyle = `rgba(255, 0, 50, ${beamAlpha})`;
+        ctx.fillRect(boss.slamTargetX - 25, 0, 50, 350);
+        ctx.strokeStyle = '#FF0033';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(boss.slamTargetX - 25, 340, 50, 10);
+      } else if (boss.telegraphType === 'barrage') {
+        ctx.save();
+        ctx.translate(boss.x + boss.w / 2, boss.y + boss.h / 2);
+        ctx.rotate(Date.now() / 100);
+        ctx.strokeStyle = '#BA55D3';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(-28, -28, 56, 56);
+        ctx.restore();
+      }
+    }
+
+    // Meteor Landing Zone Telegraphs (World Space)
+    bossProjectilesRef.current.forEach(bp => {
+      if (bp.type === 'meteor' && bp.telegraphTimer && bp.telegraphTimer > 0) {
+        const pulse = 0.4 + Math.sin(Date.now() / 80) * 0.3;
+        ctx.fillStyle = `rgba(255, 50, 0, ${pulse})`;
+        ctx.beginPath();
+        ctx.ellipse(bp.targetX || bp.x, 348, 30, 10, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#FFD700';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+    });
+
+    // Boss Projectiles (World Space)
+    bossProjectilesRef.current.forEach(bp => {
+      if (bp.type === 'orb') {
+        const grad = ctx.createRadialGradient(bp.x + bp.w / 2, bp.y + bp.h / 2, 2, bp.x + bp.w / 2, bp.y + bp.h / 2, bp.w / 2);
+        grad.addColorStop(0, '#FFFFFF');
+        grad.addColorStop(0.4, '#9400D3');
+        grad.addColorStop(1, '#1A0033');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(bp.x + bp.w / 2, bp.y + bp.h / 2, bp.w / 2, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (bp.type === 'shockwave') {
+        ctx.fillStyle = '#FF0055';
+        ctx.beginPath();
+        ctx.moveTo(bp.x, bp.y + bp.h);
+        ctx.lineTo(bp.x + bp.w / 2, bp.y);
+        ctx.lineTo(bp.x + bp.w, bp.y + bp.h);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#00FFFF';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      } else if (bp.type === 'meteor' && (!bp.telegraphTimer || bp.telegraphTimer <= 0)) {
+        const mGrad = ctx.createRadialGradient(bp.x + bp.w / 2, bp.y + bp.h / 2, 3, bp.x + bp.w / 2, bp.y + bp.h / 2, bp.w / 2);
+        mGrad.addColorStop(0, '#FFFF00');
+        mGrad.addColorStop(0.5, '#FF4500');
+        mGrad.addColorStop(1, '#8B0000');
+        ctx.fillStyle = mGrad;
+        ctx.beginPath();
+        ctx.arc(bp.x + bp.w / 2, bp.y + bp.h / 2, bp.w / 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    });
+
+    // Boss Entity (World Space)
+    if (boss && boss.active) {
+      ctx.save();
+      // Aura
+      const auraColor = boss.phase === 3 ? 'rgba(255, 0, 50, 0.45)' : boss.phase === 2 ? 'rgba(148, 0, 211, 0.35)' : 'rgba(75, 0, 130, 0.25)';
+      const auraSize = boss.phase === 3 ? 18 : 10;
+      ctx.fillStyle = auraColor;
+      ctx.beginPath();
+      ctx.roundRect(boss.x - auraSize, boss.y - auraSize, boss.w + auraSize * 2, boss.h + auraSize * 2, 16);
+      ctx.fill();
+
+      // Wings
+      const wingFlap = Math.sin(Date.now() / 140) * 12;
+      ctx.fillStyle = boss.phase === 3 ? '#8B0000' : '#2D0A4E';
+      // Left wing
+      ctx.beginPath();
+      ctx.moveTo(boss.x + 15, boss.y + 35);
+      ctx.lineTo(boss.x - 45, boss.y + 10 + wingFlap);
+      ctx.lineTo(boss.x - 25, boss.y + 60 + wingFlap);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = '#9400D3';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      // Right wing
+      ctx.beginPath();
+      ctx.moveTo(boss.x + boss.w - 15, boss.y + 35);
+      ctx.lineTo(boss.x + boss.w + 45, boss.y + 10 + wingFlap);
+      ctx.lineTo(boss.x + boss.w + 25, boss.y + 60 + wingFlap);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Body (Obsidian Armor)
+      ctx.fillStyle = boss.hitFlash > 0 ? '#FFFFFF' : boss.phase === 3 ? '#1A000A' : '#0D0221';
+      ctx.beginPath();
+      ctx.roundRect(boss.x, boss.y, boss.w, boss.h, 14);
+      ctx.fill();
+      ctx.strokeStyle = boss.phase === 3 ? '#FF0055' : '#8A2BE2';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      // Horns / Crown
+      ctx.fillStyle = '#FFD700';
+      ctx.beginPath();
+      ctx.moveTo(boss.x + 10, boss.y);
+      ctx.lineTo(boss.x + 5, boss.y - 18);
+      ctx.lineTo(boss.x + 25, boss.y);
+      ctx.lineTo(boss.x + boss.w / 2, boss.y - 25);
+      ctx.lineTo(boss.x + boss.w - 25, boss.y);
+      ctx.lineTo(boss.x + boss.w - 5, boss.y - 18);
+      ctx.lineTo(boss.x + boss.w - 10, boss.y);
+      ctx.closePath();
+      ctx.fill();
+
+      // Glowing Eyes
+      ctx.fillStyle = boss.phase === 3 ? '#FF0000' : '#FF007F';
+      ctx.fillRect(boss.x + 18, boss.y + 26, 12, 8);
+      ctx.fillRect(boss.x + boss.w - 30, boss.y + 26, 12, 8);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(boss.x + 22, boss.y + 28, 4, 4);
+      ctx.fillRect(boss.x + boss.w - 26, boss.y + 28, 4, 4);
+
+      // Chest Power Core
+      const corePulse = 0.7 + Math.sin(Date.now() / 160) * 0.3;
+      ctx.fillStyle = boss.phase === 3 ? `rgba(255, 0, 50, ${corePulse})` : `rgba(186, 85, 211, ${corePulse})`;
+      ctx.beginPath();
+      ctx.arc(boss.x + boss.w / 2, boss.y + 55, 14, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Shadow Shield
+      if (boss.shieldActive) {
+        ctx.save();
+        ctx.translate(boss.x + boss.w / 2, boss.y + boss.h / 2);
+        ctx.rotate(Date.now() / 250);
+        ctx.strokeStyle = 'rgba(0, 255, 255, 0.85)';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        for (let s = 0; s < 6; s++) {
+          const sAngle = (s / 6) * Math.PI * 2;
+          const sx = Math.cos(sAngle) * 58;
+          const sy = Math.sin(sAngle) * 58;
+          if (s === 0) ctx.moveTo(sx, sy);
+          else ctx.lineTo(sx, sy);
+        }
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(0, 255, 255, 0.15)';
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      ctx.restore();
+    }
+
+    // Draw Goal (Only in Level 1, or in Level 2 if Boss is defeated)
+    if (levelRef.current === 1 || (levelRef.current === 2 && (!bossRef.current || bossRef.current.dead))) {
+      ctx.fillStyle = levelRef.current === 1 ? '#00FF00' : '#FF00FF';
+      ctx.fillRect(goalRef.current.x, goalRef.current.y, goalRef.current.w, goalRef.current.h);
+      ctx.fillStyle = 'white';
+      ctx.font = 'bold 16px Arial';
+      ctx.fillText('סיום!', goalRef.current.x + 10, goalRef.current.y + 50);
+    }
 
     ctx.restore();
     
-    // UI Overlay
+    // UI Overlay (Screen Space)
+    // Boss Health Bar UI
+    if (boss && boss.active && !boss.dead) {
+      const barX = 175;
+      const barY = 16;
+      const barW = 450;
+      const barH = 22;
+
+      ctx.fillStyle = 'rgba(10, 10, 18, 0.88)';
+      ctx.beginPath();
+      ctx.roundRect(barX - 4, barY - 4, barW + 8, barH + 28, 8);
+      ctx.fill();
+      ctx.strokeStyle = boss.phase === 3 ? '#FF0055' : '#9400D3';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Boss Name & Phase
+      ctx.fillStyle = '#FFD700';
+      ctx.font = 'bold 14px "Inter", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${boss.name} — שלב ${boss.phase}`, barX + barW / 2, barY + 13);
+
+      // Background bar
+      ctx.fillStyle = '#262626';
+      ctx.beginPath();
+      ctx.roundRect(barX, barY + 18, barW, barH - 4, 4);
+      ctx.fill();
+
+      // Health fill
+      const healthRatio = Math.max(0, Math.min(1, boss.displayHealth / boss.maxHealth));
+      const fillW = Math.max(0, barW * healthRatio);
+      const hpGrad = ctx.createLinearGradient(barX, 0, barX + barW, 0);
+      hpGrad.addColorStop(0, '#8B0000');
+      hpGrad.addColorStop(0.5, '#FF0055');
+      hpGrad.addColorStop(1, boss.phase === 3 ? '#FF4500' : '#BA55D3');
+      ctx.fillStyle = hpGrad;
+      ctx.beginPath();
+      ctx.roundRect(barX, barY + 18, fillW, barH - 4, 4);
+      ctx.fill();
+
+      // Phase tick marks (60% and 30%)
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(barX + barW * 0.6, barY + 16, 2, barH);
+      ctx.fillRect(barX + barW * 0.3, barY + 16, 2, barH);
+
+      // HP text
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 11px "JetBrains Mono", monospace';
+      ctx.fillText(`${Math.round(boss.health)} / ${boss.maxHealth}`, barX + barW / 2, barY + 31);
+      ctx.textAlign = 'left';
+    }
+
+    // Dramatic Intro Banner
+    if (boss && boss.introTimer > 0) {
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.78)';
+      ctx.fillRect(0, 140, 800, 110);
+      ctx.strokeStyle = '#FFD700';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(0, 140, 800, 110);
+
+      ctx.fillStyle = '#FFD700';
+      ctx.font = 'bold 28px "Inter", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('הבוס הסופי: טיטאן הצללים', 400, 185);
+
+      ctx.fillStyle = '#FF0055';
+      ctx.font = 'bold 18px "Inter", sans-serif';
+      ctx.fillText('קרב הגמר החל — שרוד ונצח!', 400, 225);
+      ctx.textAlign = 'left';
+    }
+
+    // Phase Transition Banner
+    if (boss && boss.phaseBannerTimer > 0) {
+      const bannerAlpha = Math.min(1, boss.phaseBannerTimer / 400);
+      ctx.fillStyle = `rgba(0, 0, 0, ${0.75 * bannerAlpha})`;
+      ctx.fillRect(150, 150, 500, 70);
+      ctx.strokeStyle = boss.phase === 3 ? '#FF0055' : '#9400D3';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(150, 150, 500, 70);
+
+      ctx.fillStyle = boss.phase === 3 ? '#FF0055' : '#BA55D3';
+      ctx.font = 'bold 24px "Inter", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(boss.phaseBannerText, 400, 195);
+      ctx.textAlign = 'left';
+    }
+
     ctx.fillStyle = 'black';
     ctx.font = 'bold 20px "JetBrains Mono", monospace';
     ctx.fillText(`Score: ${scoreRef.current}`, 20, 30);
@@ -1760,6 +2754,25 @@ export default function App() {
           }}
         />
       )}
+
+      {/* Final Boss Victory Celebration Modal */}
+      <VictoryModal
+        isOpen={victoryModalOpen}
+        onClose={() => setVictoryModalOpen(false)}
+        onPlayAgain={() => {
+          setVictoryModalOpen(false);
+          initLevel(1, true);
+          setIsPlaying(true);
+        }}
+        onOpenShop={() => {
+          setVictoryModalOpen(false);
+          setIsPlaying(false);
+          setShowShop(true);
+        }}
+        rewardCoins={victoryRewards.coins}
+        rewardScore={victoryRewards.score}
+        weaponUnlockedName={victoryRewards.unlockedWeapon}
+      />
     </div>
   );
 }
