@@ -1,12 +1,24 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Settings, Play, RefreshCw, Pause } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Settings, Play, RefreshCw, Pause, LogOut, Cloud } from 'lucide-react';
+import { authService } from './services/authService';
+import { saveService, createDefaultSave } from './services/saveService';
+import type { 
+  CollectibleType, 
+  EnemyType, 
+  PowerUpType, 
+  WeaponType, 
+  GameConfig, 
+  GameStats, 
+  GameSaveData, 
+  User, 
+  ConflictData 
+} from './types/save';
+import { AuthModal } from './components/AuthModal';
+import { ConflictModal } from './components/ConflictModal';
+import { UserMenu } from './components/UserMenu';
+import { SaveIndicator } from './components/SaveIndicator';
 
-// --- Types ---
-type CollectibleType = 'coins' | 'diamonds' | 'rabbits';
-type EnemyType = 'slimes' | 'zombies' | 'rabbits' | 'ghosts' | 'skeletons' | 'creepers';
-type PowerUpType = 'doubleJump' | 'dash' | 'fireball';
-type WeaponType = 'w1' | 'w2' | 'w3' | 'w4' | 'w5' | 'w6' | 'w7' | 'w8' | 'w9' | 'w10' | 'w11' | 'w12' | 'w13' | 'w14' | 'w15' | 'w16' | 'w17' | 'w18' | 'w19' | 'w20';
-
+// --- Weapon Definitions ---
 interface WeaponInfo {
   id: WeaponType;
   name: string;
@@ -17,14 +29,6 @@ interface WeaponInfo {
   count: number;
   color: string;
   type: 'pistol' | 'smg' | 'rifle' | 'shotgun' | 'heavy' | 'sci-fi';
-}
-
-interface GameConfig {
-  collectible: CollectibleType;
-  enemy: EnemyType;
-  powerUp: PowerUpType;
-  speed: number;
-  weapon: WeaponType;
 }
 
 // --- Game Engine ---
@@ -89,24 +93,34 @@ interface Entity extends Rect {
 }
 
 export default function App() {
-  const [config, setConfig] = useState<GameConfig>({
-    collectible: 'coins',
-    enemy: 'slimes',
-    powerUp: 'doubleJump',
-    speed: 5,
-    weapon: 'w1',
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authModalMode, setAuthModalMode] = useState<'login' | 'signup'>('login');
+  const [conflictData, setConflictData] = useState<ConflictData | null>(null);
+
+  const [config, setConfig] = useState<GameConfig>(() => {
+    const local = saveService.getLocalSave();
+    return local.config || {
+      collectible: 'coins',
+      enemy: 'slimes',
+      powerUp: 'doubleJump',
+      speed: 5,
+      weapon: 'w1',
+    };
   });
   
   const [isPlaying, setIsPlaying] = useState(false);
   const [showConfig, setShowConfig] = useState(true);
   const [showShop, setShowShop] = useState(false);
+  
   const [unlockedWeapons, setUnlockedWeapons] = useState<WeaponType[]>(() => {
-    const saved = localStorage.getItem('unlockedWeapons');
-    return saved ? JSON.parse(saved) : ['w1'];
+    const local = saveService.getLocalSave();
+    return local.unlockedWeapons || ['w1'];
   });
+
   const [currency, setCurrency] = useState(() => {
-    const saved = localStorage.getItem('currency');
-    return saved ? parseInt(saved) : 0;
+    const local = saveService.getLocalSave();
+    return local.currency || 0;
   });
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -122,17 +136,120 @@ export default function App() {
   const lastShotRef = useRef<number>(0);
   const lastFireballRef = useRef<number>(0);
   const currencyRef = useRef(0);
+  const statsRef = useRef<GameStats>({
+    highScore: 0,
+    maxLevelReached: 1,
+    completedLevels: [],
+    totalCoinsEarned: 0,
+    enemiesDefeated: 0,
+    gamesPlayed: 0,
+    wins: 0
+  });
   
   // Sync currencyRef with initial state
   useEffect(() => {
     currencyRef.current = currency;
   }, []);
 
-  // Save to localStorage whenever currency or unlockedWeapons changes
+  // Helper to snapshot current game state for saving
+  const getCurrentSaveSnapshot = useCallback((): GameSaveData => {
+    return {
+      currency: currencyRef.current,
+      unlockedWeapons,
+      equippedWeapon: config.weapon,
+      config,
+      stats: {
+        highScore: Math.max(scoreRef.current, statsRef.current.highScore),
+        maxLevelReached: Math.max(levelRef.current, statsRef.current.maxLevelReached),
+        completedLevels: statsRef.current.completedLevels,
+        totalCoinsEarned: statsRef.current.totalCoinsEarned,
+        enemiesDefeated: statsRef.current.enemiesDefeated,
+        gamesPlayed: statsRef.current.gamesPlayed,
+        wins: statsRef.current.wins
+      },
+      saveVersion: 1,
+      updatedAt: new Date().toISOString()
+    };
+  }, [unlockedWeapons, config]);
+
+  // Apply save data to state & refs
+  const applySaveData = useCallback((save: GameSaveData) => {
+    currencyRef.current = save.currency;
+    setCurrency(save.currency);
+    setUnlockedWeapons(save.unlockedWeapons);
+    if (save.config) {
+      setConfig(save.config);
+    }
+    if (save.stats) {
+      statsRef.current = {
+        highScore: save.stats.highScore || 0,
+        maxLevelReached: save.stats.maxLevelReached || 1,
+        completedLevels: save.stats.completedLevels || [],
+        totalCoinsEarned: save.stats.totalCoinsEarned || 0,
+        enemiesDefeated: save.stats.enemiesDefeated || 0,
+        gamesPlayed: save.stats.gamesPlayed || 0,
+        wins: save.stats.wins || 0
+      };
+    }
+    saveService.setLocalSave(save);
+  }, []);
+
+  // Initial user authentication & cloud save check on mount
   useEffect(() => {
-    localStorage.setItem('currency', currencyRef.current.toString());
-    localStorage.setItem('unlockedWeapons', JSON.stringify(unlockedWeapons));
-  }, [currency, unlockedWeapons]);
+    let mounted = true;
+    async function initAuthAndSave() {
+      try {
+        const { user, save } = await authService.getCurrentUser();
+        if (!mounted) return;
+
+        if (user && save) {
+          setCurrentUser(user);
+          const localSave = saveService.getLocalSave();
+
+          // Check if there's a significant conflict between local guest save and cloud save
+          const hasLocalDifference = 
+            localSave.currency > save.currency ||
+            localSave.unlockedWeapons.some(w => !save.unlockedWeapons.includes(w));
+
+          if (hasLocalDifference) {
+            setConflictData({ localSave, cloudSave: save });
+          } else {
+            applySaveData(save);
+          }
+        } else {
+          // Guest mode: load local save
+          const localSave = saveService.getLocalSave();
+          applySaveData(localSave);
+        }
+      } catch {
+        const localSave = saveService.getLocalSave();
+        applySaveData(localSave);
+      }
+    }
+
+    initAuthAndSave();
+    return () => {
+      mounted = false;
+    };
+  }, [applySaveData]);
+
+  // Periodic autosave during gameplay (every 20 seconds)
+  useEffect(() => {
+    if (!isPlaying) return;
+    const interval = setInterval(() => {
+      saveService.queueDebouncedSave(getCurrentSaveSnapshot());
+    }, 20000);
+    return () => clearInterval(interval);
+  }, [isPlaying, getCurrentSaveSnapshot]);
+
+  // Window beforeunload: save progress before closing or refreshing
+  useEffect(() => {
+    const handleUnload = () => {
+      saveService.saveNow(getCurrentSaveSnapshot());
+    };
+    window.addEventListener('beforeunload', handleUnload);
+    return () => window.removeEventListener('beforeunload', handleUnload);
+  }, [getCurrentSaveSnapshot]);
 
   const livesRef = useRef(3);
   const levelRef = useRef(1);
@@ -249,9 +366,9 @@ export default function App() {
     keysRef.current = {}; // Clear stuck keys
     livesRef.current -= 1;
     
-    // Sync currency to state and localStorage on death to ensure it's saved
+    // Sync currency to state and save on death to ensure it's persisted
     setCurrency(currencyRef.current);
-    localStorage.setItem('currency', currencyRef.current.toString());
+    saveService.saveNow(getCurrentSaveSnapshot());
 
     if (livesRef.current <= 0) {
       setIsPlaying(false);
@@ -631,6 +748,7 @@ export default function App() {
           enemy.dead = true;
           p.vy = JUMP_FORCE * 0.8;
           scoreRef.current += 100;
+          statsRef.current.enemiesDefeated += 1;
         } else {
           // Player dies
           handleDeath();
@@ -646,6 +764,8 @@ export default function App() {
         c.collected = true;
         scoreRef.current += 10;
         currencyRef.current += 1;
+        statsRef.current.totalCoinsEarned += 1;
+        saveService.queueDebouncedSave(getCurrentSaveSnapshot());
       }
     });
     
@@ -678,7 +798,7 @@ export default function App() {
         if (!cp.collected) {
           cp.collected = true;
           lastCheckpointRef.current = { x: cp.x, y: cp.y };
-          // Visual feedback could be added here
+          saveService.saveNow(getCurrentSaveSnapshot());
         }
       }
     });
@@ -686,14 +806,21 @@ export default function App() {
     // Goal collision
     if (checkCollision(p, goalRef.current)) {
       keysRef.current = {}; // Clear stuck keys
-      
-      // Sync currency on level completion
       setCurrency(currencyRef.current);
-      localStorage.setItem('currency', currencyRef.current.toString());
 
       if (levelRef.current === 1) {
+        if (!statsRef.current.completedLevels.includes(1)) {
+          statsRef.current.completedLevels.push(1);
+        }
+        statsRef.current.maxLevelReached = Math.max(statsRef.current.maxLevelReached, 2);
+        saveService.saveNow(getCurrentSaveSnapshot());
         initLevel(2, false);
       } else {
+        if (!statsRef.current.completedLevels.includes(2)) {
+          statsRef.current.completedLevels.push(2);
+        }
+        statsRef.current.wins += 1;
+        saveService.saveNow(getCurrentSaveSnapshot());
         setIsPlaying(false);
         setShowConfig(true);
         initLevel(1, true);
@@ -1261,17 +1388,30 @@ export default function App() {
 
   const startGame = () => {
     keysRef.current = {}; // Clear stuck keys
+    statsRef.current.gamesPlayed += 1;
     initLevel(1, true);
     setIsPlaying(true);
     setShowConfig(false);
     setShowShop(false);
   };
 
+  const handleAuthSuccess = (user: User, cloudSave: GameSaveData) => {
+    setCurrentUser(user);
+    applySaveData(cloudSave);
+  };
+
+  const handleLogout = async () => {
+    await authService.logout();
+    setCurrentUser(null);
+    const local = saveService.getLocalSave();
+    applySaveData(local);
+  };
+
   return (
     <div className="min-h-screen bg-zinc-900 text-zinc-100 flex flex-col items-center justify-center p-4 font-sans" dir="rtl">
       
       <div className="max-w-4xl w-full">
-        <header className="mb-6 text-center">
+        <header className="mb-4 text-center">
           <h1 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-blue-500 mb-2">
             יוצר המשחקים - סגנון מריו
           </h1>
@@ -1279,6 +1419,17 @@ export default function App() {
             תכנן את המשחק שלך! בחר את האפשרויות למטה ושחק.
           </p>
         </header>
+
+        {/* User Account & Cloud Save Header Bar */}
+        <UserMenu 
+          user={currentUser}
+          currency={currency}
+          onOpenAuth={(mode) => {
+            setAuthModalMode(mode || 'login');
+            setAuthModalOpen(true);
+          }}
+          onLogout={handleLogout}
+        />
 
         <div className="flex flex-col lg:flex-row gap-6">
           {/* Game Canvas Container */}
@@ -1435,9 +1586,12 @@ export default function App() {
                   </button>
                 </div>
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     if (confirm('האם אתה בטוח שברצונך לאפס את כל ההתקדמות? (מטבעות ונשקים)')) {
-                      localStorage.clear();
+                      saveService.clearLocalSave();
+                      if (currentUser) {
+                        await saveService.saveNow(createDefaultSave(), true);
+                      }
                       window.location.reload();
                     }
                   }}
@@ -1477,7 +1631,15 @@ export default function App() {
                           <span className="text-green-400 text-sm font-bold px-3 py-1">מצויד</span>
                         ) : isOwned ? (
                           <button 
-                            onClick={() => setConfig({...config, weapon: w.id as WeaponType})}
+                            onClick={() => {
+                              const newConfig = { ...config, weapon: w.id as WeaponType };
+                              setConfig(newConfig);
+                              saveService.saveNow({
+                                ...getCurrentSaveSnapshot(),
+                                equippedWeapon: w.id as WeaponType,
+                                config: newConfig
+                              });
+                            }}
                             className="bg-zinc-700 hover:bg-zinc-600 text-white text-xs px-3 py-1 rounded transition-colors"
                           >
                             צייד
@@ -1487,10 +1649,20 @@ export default function App() {
                             disabled={currency < w.cost}
                             onClick={() => {
                               if (currency >= w.cost) {
-                                currencyRef.current -= w.cost;
-                                setCurrency(currencyRef.current);
-                                setUnlockedWeapons([...unlockedWeapons, w.id as WeaponType]);
-                                setConfig({...config, weapon: w.id as WeaponType});
+                                const newCurrency = currencyRef.current - w.cost;
+                                currencyRef.current = newCurrency;
+                                setCurrency(newCurrency);
+                                const newWeapons = [...unlockedWeapons, w.id as WeaponType];
+                                setUnlockedWeapons(newWeapons);
+                                const newConfig = { ...config, weapon: w.id as WeaponType };
+                                setConfig(newConfig);
+                                saveService.saveNow({
+                                  ...getCurrentSaveSnapshot(),
+                                  currency: newCurrency,
+                                  unlockedWeapons: newWeapons,
+                                  equippedWeapon: w.id as WeaponType,
+                                  config: newConfig
+                                });
                               }
                             }}
                             className={`text-xs px-3 py-1 rounded font-bold transition-colors ${currency >= w.cost ? 'bg-yellow-500 hover:bg-yellow-400 text-black' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'}`}
@@ -1516,7 +1688,10 @@ export default function App() {
           {/* Controls Info when playing */}
           {!showConfig && (
             <div className="w-full lg:w-64 bg-zinc-800 rounded-xl p-6 shadow-xl border border-zinc-700 flex flex-col gap-4">
-              <h3 className="font-bold text-lg mb-2 border-b border-zinc-700 pb-2">מקשים</h3>
+              <div className="flex items-center justify-between border-b border-zinc-700 pb-2">
+                <h3 className="font-bold text-lg">מקשים</h3>
+                <SaveIndicator isLoggedIn={!!currentUser} />
+              </div>
               <ul className="space-y-2 text-sm text-zinc-300">
                 <li><kbd className="bg-zinc-900 px-2 py-1 rounded border border-zinc-700">חצים / A D</kbd> - תזוזה</li>
                 <li><kbd className="bg-zinc-900 px-2 py-1 rounded border border-zinc-700">רווח / חץ למעלה</kbd> - קפיצה</li>
@@ -1532,20 +1707,59 @@ export default function App() {
                 <li><kbd className="bg-zinc-900 px-2 py-1 rounded border border-zinc-700">R</kbd> - ירייה באקדח</li>
               </ul>
               
-              <button
-                onClick={() => {
-                  setIsPlaying(false);
-                  setShowConfig(true);
-                }}
-                className="mt-auto bg-zinc-700 hover:bg-zinc-600 text-white py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm"
-              >
-                <Settings size={16} />
-                חזור להגדרות
-              </button>
+              <div className="mt-auto flex flex-col gap-2 pt-2 border-t border-zinc-700/60">
+                <button
+                  onClick={() => {
+                    setIsPlaying(false);
+                    setShowConfig(true);
+                  }}
+                  className="bg-zinc-700 hover:bg-zinc-600 text-white py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm"
+                >
+                  <Settings size={16} />
+                  חזור להגדרות
+                </button>
+                {currentUser && (
+                  <button
+                    onClick={handleLogout}
+                    className="text-xs text-zinc-400 hover:text-red-400 py-1 flex items-center justify-center gap-1.5 transition-colors"
+                  >
+                    <LogOut size={12} />
+                    התנתק מהחשבון
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>
       </div>
+
+      {/* Authentication Modal */}
+      <AuthModal 
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        onSuccess={handleAuthSuccess}
+        guestSave={!currentUser ? getCurrentSaveSnapshot() : null}
+        initialMode={authModalMode}
+      />
+
+      {/* Conflict Resolution Modal */}
+      {conflictData && (
+        <ConflictModal 
+          isOpen={!!conflictData}
+          localSave={conflictData.localSave}
+          cloudSave={conflictData.cloudSave}
+          onSelectCloud={() => {
+            applySaveData(conflictData.cloudSave);
+            saveService.setLocalSave(conflictData.cloudSave);
+            setConflictData(null);
+          }}
+          onSelectLocal={async () => {
+            applySaveData(conflictData.localSave);
+            await saveService.saveNow(conflictData.localSave, true);
+            setConflictData(null);
+          }}
+        />
+      )}
     </div>
   );
 }
