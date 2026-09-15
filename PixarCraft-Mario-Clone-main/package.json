@@ -3,6 +3,7 @@
   "private": true,
   "version": "1.0.2",
   "type": "module",
+  "homepage": "https://ariel-zemmour.github.io/PixarCraft-Mario-Clone-main",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite --port=3201 --host=0.0.0.0",
@@ -11,7 +12,9 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "release": "vite build && electron-builder --win -p always"
+    "release": "vite build && electron-builder --win -p always",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d dist"
   },
   "build": {
     "appId": "com.example.marioclone",
@@ -62,6 +65,7 @@
     "autoprefixer": "^10.4.21",
     "electron": "^44.3.0",
     "electron-builder": "^26.15.3",
+    "gh-pages": "^6.3.0",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
