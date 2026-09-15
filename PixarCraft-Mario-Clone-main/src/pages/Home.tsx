@@ -19,14 +19,15 @@ export function Home() {
         </p>
 
         <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
-          <Link 
-            to="/download" 
+          <a 
+            href="https://github.com/ariel-zemmour/PixarCraft-Mario-Clone-main/releases/latest/download/Mario-Clone-Setup.exe"
+            download="Mario-Clone-Setup.exe"
             className="group relative inline-flex items-center justify-center px-8 py-4 font-bold text-white bg-blue-600 rounded-xl overflow-hidden shadow-2xl hover:bg-blue-500 transition-all hover:scale-105 active:scale-95 text-lg"
           >
             <div className="absolute inset-0 w-full h-full -mt-1 rounded-lg opacity-30 bg-gradient-to-b from-transparent via-transparent to-black" />
             <Download className="w-6 h-6 ml-3 group-hover:-translate-y-1 transition-transform" />
             הורדת המשחק
-          </Link>
+          </a>
           <Link 
             to="/play" 
             className="inline-flex items-center justify-center px-8 py-4 font-bold text-zinc-300 bg-zinc-800 border border-zinc-700 rounded-xl hover:bg-zinc-700 hover:text-white transition-all active:scale-95"

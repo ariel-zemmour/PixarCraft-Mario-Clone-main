@@ -24,10 +24,10 @@ export function Layout() {
               <Home className="w-4 h-4" />
               <span>Home</span>
             </Link>
-            <Link to="/download" className={`flex items-center space-x-1 hover:text-white transition-colors ${location.pathname === '/download' ? 'text-white' : 'text-zinc-400'}`}>
+            <a href="https://github.com/ariel-zemmour/PixarCraft-Mario-Clone-main/releases/latest/download/Mario-Clone-Setup.exe" download="Mario-Clone-Setup.exe" className={`flex items-center space-x-1 hover:text-white transition-colors text-zinc-400`}>
               <Download className="w-4 h-4" />
               <span>Download</span>
-            </Link>
+            </a>
             <Link to="/account" className={`flex items-center space-x-1 hover:text-white transition-colors ${location.pathname === '/account' ? 'text-white' : 'text-zinc-400'}`}>
               <User className="w-4 h-4" />
               <span>Account</span>
@@ -49,7 +49,7 @@ export function Layout() {
           <p>© {new Date().getFullYear()} PixarCraft Mario Clone. All rights reserved.</p>
           <div className="flex space-x-4 mt-4 md:mt-0">
             <Link to="/" className="hover:text-zinc-300">Home</Link>
-            <Link to="/download" className="hover:text-zinc-300">Download</Link>
+            <a href="https://github.com/ariel-zemmour/PixarCraft-Mario-Clone-main/releases/latest/download/Mario-Clone-Setup.exe" download="Mario-Clone-Setup.exe" className="hover:text-zinc-300">Download</a>
           </div>
         </div>
       </footer>
