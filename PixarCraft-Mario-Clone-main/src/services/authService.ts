@@ -20,7 +20,7 @@ export const authService = {
     if (!token) return { user: null, save: null };
 
     try {
-      const res = await fetch('/api/auth/me', {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/auth/me`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -45,7 +45,7 @@ export const authService = {
     confirmPassword: string, 
     guestSave?: GameSaveData | null
   ): Promise<{ user: User; save: GameSaveData }> {
-    const res = await fetch('/api/auth/register', {
+    const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -66,7 +66,7 @@ export const authService = {
   },
 
   async login(email: string, password: string): Promise<{ user: User; save: GameSaveData }> {
-    const res = await fetch('/api/auth/login', {
+    const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password })
@@ -85,7 +85,7 @@ export const authService = {
     const token = this.getToken();
     if (token) {
       try {
-        await fetch('/api/auth/logout', {
+        await fetch(`${import.meta.env.VITE_API_URL || ''}/api/auth/logout`, {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -97,7 +97,7 @@ export const authService = {
   },
 
   async requestPasswordReset(email: string): Promise<{ message: string; code?: string }> {
-    const res = await fetch('/api/auth/forgot-password', {
+    const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/auth/forgot-password`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email })
@@ -112,7 +112,7 @@ export const authService = {
   },
 
   async resetPassword(email: string, code: string, newPassword: string, confirmPassword: string): Promise<string> {
-    const res = await fetch('/api/auth/reset-password', {
+    const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/auth/reset-password`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, code, newPassword, confirmPassword })

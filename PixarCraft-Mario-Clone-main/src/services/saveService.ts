@@ -195,7 +195,7 @@ class SaveService {
     this.setStatus('saving', 'שומר בענן...');
 
     try {
-      const res = await fetch('/api/save', {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/save`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -265,7 +265,7 @@ class SaveService {
     if (!token) return null;
 
     try {
-      const res = await fetch('/api/save', {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/save`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) return null;
