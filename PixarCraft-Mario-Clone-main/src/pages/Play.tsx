@@ -174,7 +174,9 @@ export default function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [showConfig, setShowConfig] = useState(true);
   const [showShop, setShowShop] = useState(false);
-  
+  const [blackScreenMessage, setBlackScreenMessage] = useState<string | null>(null);
+  const [isGameOver, setIsGameOver] = useState(false);
+
   const [unlockedWeapons, setUnlockedWeapons] = useState<WeaponType[]>(() => {
     const local = saveService.getLocalSave();
     return local.unlockedWeapons || ['w1'];
@@ -187,6 +189,13 @@ export default function App() {
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const requestRef = useRef<number>();
+
+  // Refs that mirror React state — updated synchronously every render,
+  // so fireWeapon() and the game loop always read the latest values.
+  const isPlayingRef = useRef(isPlaying);
+  const configRef = useRef(config);
+  isPlayingRef.current = isPlaying;   // sync on every render, no useEffect delay
+  configRef.current = config;         // sync on every render, no useEffect delay
   
   // Game State Refs (to avoid dependency issues in loop)
   const playerRef = useRef<Player>({ x: 50, y: 100, w: 30, h: 40, vx: 0, vy: 0, isGrounded: false, canDoubleJump: false, facingRight: true, airplaneTimer: 0 });
@@ -343,6 +352,9 @@ export default function App() {
   }, [getCurrentSaveSnapshot]);
 
   const livesRef = useRef(3);
+  const playerHeartsRef = useRef(3);
+  const invincibilityTimerRef = useRef(0);
+  const isPausedRef = useRef(false);
   const levelRef = useRef(1);
   const goalRef = useRef<Rect>({ x: 0, y: 0, w: 60, h: 100 });
   
@@ -416,6 +428,7 @@ export default function App() {
   const initLevel = (level: number, resetLives = false) => {
     if (resetLives) {
       livesRef.current = 3;
+      playerHeartsRef.current = 3;
       lastCheckpointRef.current = null;
     }
     levelRef.current = level;
@@ -650,6 +663,17 @@ export default function App() {
     }
   };
 
+  const takeDamage = (amount: number) => {
+    if (invincibilityTimerRef.current > 0) return;
+    
+    playerHeartsRef.current -= amount;
+    if (playerHeartsRef.current > 0) {
+      invincibilityTimerRef.current = 60;
+    } else {
+      handleDeath();
+    }
+  };
+
   const handleDeath = () => {
     keysRef.current = {}; // Clear stuck keys
     livesRef.current -= 1;
@@ -686,24 +710,30 @@ export default function App() {
     saveService.saveNow(getCurrentSaveSnapshot());
 
     if (livesRef.current <= 0) {
-      setIsPlaying(false);
-      setShowConfig(true);
-      scoreRef.current = 0;
-      initLevel(1, true);
+      isPausedRef.current = true;
+      setIsGameOver(true);
+      setBlackScreenMessage("המשחק נגמר");
     } else {
-      // Respawn at last checkpoint or start
-      if (lastCheckpointRef.current) {
-        playerRef.current.x = lastCheckpointRef.current.x;
-        playerRef.current.y = lastCheckpointRef.current.y;
-      } else {
-        playerRef.current.x = 50;
-        playerRef.current.y = 100;
-      }
-      playerRef.current.vx = 0;
-      playerRef.current.vy = 0;
-      isMouseDownRef.current = false;
-      hasFiredForCurrentClickRef.current = false;
-      cameraRef.current.x = Math.max(0, playerRef.current.x - 200);
+      isPausedRef.current = true;
+      setBlackScreenMessage(`נותרו ${livesRef.current} חיים`);
+      setTimeout(() => {
+        setBlackScreenMessage(null);
+        isPausedRef.current = false;
+        playerHeartsRef.current = 3;
+        // Respawn at last checkpoint or start
+        if (lastCheckpointRef.current) {
+          playerRef.current.x = lastCheckpointRef.current.x;
+          playerRef.current.y = lastCheckpointRef.current.y;
+        } else {
+          playerRef.current.x = 50;
+          playerRef.current.y = 100;
+        }
+        playerRef.current.vx = 0;
+        playerRef.current.vy = 0;
+        isMouseDownRef.current = false;
+        hasFiredForCurrentClickRef.current = false;
+        cameraRef.current.x = Math.max(0, playerRef.current.x - 200);
+      }, 2000);
     }
   };
 
@@ -715,14 +745,19 @@ export default function App() {
 
   // Unified fire weapon handler using equipped weapon stats and cooldown
   const fireWeapon = () => {
-    if (!isPlaying) return false;
+    console.log('[fireWeapon] called. isPlayingRef.current=', isPlayingRef.current);
+    if (!isPlayingRef.current) { console.log('[fireWeapon] BLOCKED: not playing'); return false; }
     const now = Date.now();
-    const weaponId = config.weapon;
+    const weaponId = configRef.current.weapon;
     const weapon = WEAPONS.find(w => w.id === weaponId);
-    if (!weapon) return false;
+    console.log('[fireWeapon] weaponId=', weaponId, 'weapon=', weapon?.name);
+    if (!weapon) { console.log('[fireWeapon] BLOCKED: weapon not found'); return false; }
 
-    if (now - lastShotRef.current < weapon.cooldown) {
-      return false; // Weapon still on cooldown
+    const timeSince = now - lastShotRef.current;
+    console.log('[fireWeapon] timeSince=', timeSince, 'cooldown=', weapon.cooldown);
+    if (timeSince < weapon.cooldown) {
+      console.log('[fireWeapon] BLOCKED: on cooldown, need', weapon.cooldown - timeSince, 'ms more');
+      return false;
     }
 
     lastShotRef.current = now;
@@ -736,6 +771,7 @@ export default function App() {
     const dx = targetX - startX;
     const dy = targetY - startY;
     const angle = Math.atan2(dy, dx);
+    console.log('[fireWeapon] FIRING! bullets before=', bulletsRef.current.length, 'angle=', angle.toFixed(2));
 
     if (weapon.count > 1) {
       for (let i = 0; i < weapon.count; i++) {
@@ -760,6 +796,7 @@ export default function App() {
         vy: Math.sin(angle) * weapon.speed 
       });
     }
+    console.log('[fireWeapon] bullets after=', bulletsRef.current.length);
 
     // Add muzzle flash and smoke for fast/machine weapons
     const isMachineGun = weapon.cooldown < 200;
@@ -788,29 +825,26 @@ export default function App() {
     return true;
   };
 
-  // Input Handling (Keyboard & Left Mouse Button Shooting)
+  // ─── Keyboard Input (useEffect so we can add/remove properly) ───────────────
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       keysRef.current[e.code] = true;
-      
-      // Jump logic
-      if ((e.code === 'Space' || e.code === 'ArrowUp') && isPlaying) {
+      if ((e.code === 'Space' || e.code === 'ArrowUp') && isPlayingRef.current) {
         if (playerRef.current.airplaneTimer > 0) {
-          // In airplane mode, space/up moves up continuously
+          // airplane mode handled in update
         } else {
           if (playerRef.current.isGrounded) {
             playerRef.current.vy = JUMP_FORCE;
             playerRef.current.isGrounded = false;
-            playerRef.current.canDoubleJump = config.powerUp === 'doubleJump';
+            playerRef.current.canDoubleJump = configRef.current.powerUp === 'doubleJump';
           } else if (playerRef.current.canDoubleJump) {
             playerRef.current.vy = JUMP_FORCE;
             playerRef.current.canDoubleJump = false;
           }
         }
       }
-
-      // Fireball logic
-      if (e.code === 'KeyF' && isPlaying && config.powerUp === 'fireball') {
+      // Fireball
+      if (e.code === 'KeyF' && isPlayingRef.current && configRef.current.powerUp === 'fireball') {
         const now = Date.now();
         if (now - lastFireballRef.current > 7000) {
           lastFireballRef.current = now;
@@ -818,96 +852,88 @@ export default function App() {
           const dir = p.facingRight ? 1 : -1;
           bulletsRef.current.push({
             x: p.facingRight ? p.x + p.w : p.x - 20,
-            y: p.y + 10,
-            w: 20,
-            h: 20,
-            vx: dir * 12,
-            vy: 0,
-            isFireball: true
+            y: p.y + 10, w: 20, h: 20,
+            vx: dir * 12, vy: 0, isFireball: true
           });
         }
       }
     };
-
     const handleKeyUp = (e: KeyboardEvent) => { keysRef.current[e.code] = false; };
-    const handleBlur = () => { 
-      keysRef.current = {}; 
+    const handleBlur = () => {
+      keysRef.current = {};
       isMouseDownRef.current = false;
       hasFiredForCurrentClickRef.current = false;
     };
-
-    // Left Mouse Button Shooting Handlers
-    const handleCanvasMouseDown = (e: MouseEvent) => {
-      // Button 0 is Left Mouse Button (Mouse 1)
-      if (e.button !== 0) return;
-      if (!isPlaying) return;
-
-      isMouseDownRef.current = true;
-      hasFiredForCurrentClickRef.current = false;
-
-      // Adjust player facing direction towards click position on screen
-      if (canvasRef.current) {
-        const rect = canvasRef.current.getBoundingClientRect();
-        if (rect.width > 0) {
-          const clickCanvasX = (e.clientX - rect.left) * (800 / rect.width);
-          const worldClickX = clickCanvasX + cameraRef.current.x;
-          playerRef.current.facingRight = worldClickX >= playerRef.current.x + playerRef.current.w / 2;
-        }
-      }
-
-      // Fire weapon immediately on click
-      const fired = fireWeapon();
-      if (fired) {
-        hasFiredForCurrentClickRef.current = true;
-      }
-    };
-
-    const handleCanvasMouseMove = (e: MouseEvent) => {
-      if (!isPlaying || !canvasRef.current) return;
-      const rect = canvasRef.current.getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0) {
-        const mouseCanvasX = (e.clientX - rect.left) * (800 / rect.width);
-        const mouseCanvasY = (e.clientY - rect.top) * (400 / rect.height);
-        const worldMouseX = mouseCanvasX + cameraRef.current.x;
-        const worldMouseY = mouseCanvasY + cameraRef.current.y;
-        mouseRef.current = { x: worldMouseX, y: worldMouseY };
-        playerRef.current.facingRight = worldMouseX >= playerRef.current.x + playerRef.current.w / 2;
-      }
-    };
-
     const handleWindowMouseUp = (e: MouseEvent) => {
       if (e.button === 0) {
         isMouseDownRef.current = false;
         hasFiredForCurrentClickRef.current = false;
       }
     };
-    
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
     window.addEventListener('blur', handleBlur);
     window.addEventListener('mouseup', handleWindowMouseUp);
-
-    const canvas = canvasRef.current;
-    if (canvas) {
-      canvas.addEventListener('mousedown', handleCanvasMouseDown);
-      canvas.addEventListener('mousemove', handleCanvasMouseMove);
-    }
-
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
       window.removeEventListener('blur', handleBlur);
       window.removeEventListener('mouseup', handleWindowMouseUp);
-      if (canvas) {
-        canvas.removeEventListener('mousedown', handleCanvasMouseDown);
-        canvas.removeEventListener('mousemove', handleCanvasMouseMove);
-      }
     };
-  }, [isPlaying, config]);
+  }, []); // stable — reads all values from refs, no deps needed
+
+  // ─── Canvas Mouse Handlers (defined as component functions, fresh every render) ─
+  // These are passed directly as JSX props — no stale-closure risk.
+  const onCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    console.log('[mousedown] button=', e.button, 'isPlayingRef=', isPlayingRef.current);
+    if (e.button !== 0) { console.log('[mousedown] IGNORED: not LMB'); return; }
+    if (!isPlayingRef.current) { console.log('[mousedown] IGNORED: not playing'); return; }
+    e.preventDefault();
+
+    isMouseDownRef.current = true;
+    hasFiredForCurrentClickRef.current = false;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    console.log('[mousedown] rect=', rect.width, 'x', rect.height);
+    if (rect.width > 0 && rect.height > 0) {
+      const cx = (e.clientX - rect.left) * (800 / rect.width);
+      const cy = (e.clientY - rect.top)  * (400 / rect.height);
+      mouseRef.current = {
+        x: cx + cameraRef.current.x,
+        y: cy + cameraRef.current.y,
+      };
+      playerRef.current.facingRight =
+        mouseRef.current.x >= playerRef.current.x + playerRef.current.w / 2;
+      console.log('[mousedown] mouseRef set to', mouseRef.current);
+    }
+
+    console.log('[mousedown] calling fireWeapon()');
+    fireWeapon();
+  };
+
+  const onCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isPlayingRef.current) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      const cx = (e.clientX - rect.left) * (800 / rect.width);
+      const cy = (e.clientY - rect.top)  * (400 / rect.height);
+      mouseRef.current = {
+        x: cx + cameraRef.current.x,
+        y: cy + cameraRef.current.y,
+      };
+      playerRef.current.facingRight =
+        mouseRef.current.x >= playerRef.current.x + playerRef.current.w / 2;
+    }
+  };
 
   // Game Loop
   const update = () => {
     if (!isPlaying) return;
+    if (isPausedRef.current) return;
+    
+    if (invincibilityTimerRef.current > 0) {
+      invincibilityTimerRef.current -= 1;
+    }
     
     const p = playerRef.current;
     const currentMoveSpeed = config.speed * 1.2; // Increased base speed multiplier
@@ -930,7 +956,7 @@ export default function App() {
 
     // Continuous firing for automatic weapons while Left Mouse Button is held
     if (isMouseDownRef.current) {
-      const weapon = WEAPONS.find(w => w.id === config.weapon);
+      const weapon = WEAPONS.find(w => w.id === configRef.current.weapon);
       if (isWeaponAutomatic(weapon)) {
         fireWeapon();
       }
@@ -1101,7 +1127,7 @@ export default function App() {
       }
       
       if (checkCollision(p, b)) {
-        handleDeath();
+        takeDamage(1);
         enemyBulletsRef.current.splice(i, 1);
       }
     }
@@ -1399,8 +1425,8 @@ export default function App() {
           scoreRef.current += 100;
           statsRef.current.enemiesDefeated += 1;
         } else {
-          // Player dies
-          handleDeath();
+          // Player takes damage
+          takeDamage(1);
         }
       }
     });
@@ -1652,7 +1678,7 @@ export default function App() {
 
           // Direct collision with boss
           if (checkCollision(p, boss)) {
-            handleDeath();
+            takeDamage(1);
           }
         }
       }
@@ -1677,7 +1703,7 @@ export default function App() {
             angle: 0
           });
           if (Math.abs((p.x + p.w / 2) - (bp.x + bp.w / 2)) < 42 && p.y + p.h >= 320) {
-            handleDeath();
+            takeDamage(1);
           }
           continue;
         }
@@ -1694,7 +1720,7 @@ export default function App() {
 
       // Collision with player
       if (checkCollision(p, bp)) {
-        handleDeath();
+        takeDamage(1);
         bossProjectilesRef.current.splice(i, 1);
       }
     }
@@ -2149,6 +2175,12 @@ export default function App() {
     // Draw Player (Pixar style Bear or Airplane)
     const p = playerRef.current;
     
+    if (invincibilityTimerRef.current > 0) {
+      if (Math.floor(invincibilityTimerRef.current / 5) % 2 === 0) {
+        ctx.globalAlpha = 0.3;
+      }
+    }
+    
     if (p.airplaneTimer > 0) {
       // Draw Airplane below the bear
       ctx.fillStyle = '#C0C0C0'; // Silver plane
@@ -2310,6 +2342,7 @@ export default function App() {
       
       ctx.restore();
     }
+    ctx.globalAlpha = 1;
 
     // Arena Barrier & Posts (World Space)
     if (arena) {
@@ -2595,16 +2628,18 @@ export default function App() {
     ctx.fillText(`${currencyName}: ${currencyRef.current}`, 20, 60);
     
     ctx.fillStyle = '#FF0000';
-    ctx.fillText(`חיים: ${'❤️'.repeat(livesRef.current)}`, 20, 90);
+    ctx.fillText(`${'❤️'.repeat(playerHeartsRef.current)}`, 20, 90);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillText(`חיים: ${livesRef.current}`, 20, 120);
     
     if (playerRef.current.airplaneTimer > 0) {
       ctx.fillStyle = '#4169E1';
-      ctx.fillText(`מטוס: ${Math.ceil(playerRef.current.airplaneTimer / 1000)}s`, 20, 120);
+      ctx.fillText(`מטוס: ${Math.ceil(playerRef.current.airplaneTimer / 1000)}s`, 20, 150);
     }
     
     if (config.powerUp === 'fireball') {
       const timeSinceLastFireball = Date.now() - lastFireballRef.current;
-      const yPos = playerRef.current.airplaneTimer > 0 ? 150 : 120;
+      const yPos = playerRef.current.airplaneTimer > 0 ? 180 : 150;
       if (timeSinceLastFireball < 7000) {
         const remaining = Math.ceil((7000 - timeSinceLastFireball) / 1000);
         ctx.fillStyle = '#FF4500';
@@ -2711,13 +2746,36 @@ export default function App() {
                 </button>
               )}
 
-              <canvas 
-                ref={canvasRef} 
-                width={800} 
-                height={400} 
+              <canvas
+                ref={canvasRef}
+                width={800}
+                height={400}
                 className={`w-full h-auto bg-black rounded-lg block ${isPlaying ? 'cursor-crosshair' : 'cursor-default'}`}
                 style={{ aspectRatio: '800/400' }}
+                onMouseDown={onCanvasMouseDown}
+                onMouseMove={onCanvasMouseMove}
               />
+
+              {blackScreenMessage && (
+                <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/95 text-white rounded-lg p-8">
+                  <h2 className="text-4xl font-bold mb-6 text-center">{blackScreenMessage}</h2>
+                  {isGameOver && (
+                    <button 
+                      onClick={() => {
+                        setIsGameOver(false);
+                        setBlackScreenMessage(null);
+                        isPausedRef.current = false;
+                        scoreRef.current = 0;
+                        initLevel(1, true); // Reset gameplay progress and lives
+                        setIsPlaying(true);
+                      }}
+                      className="mt-4 px-8 py-3 bg-red-600 hover:bg-red-500 rounded text-xl font-bold transition-colors"
+                    >
+                      התחל מחדש
+                    </button>
+                  )}
+                </div>
+              )}
             
             {!isPlaying && !showConfig && (
               <div className="absolute inset-0 flex items-center justify-center">
