@@ -22,6 +22,12 @@
     "directories": {
       "output": "dist/releases"
     },
+    "compression": "maximum",
+    "files": [
+      "dist-electron/**/*",
+      "dist/**/*",
+      "!dist/releases"
+    ],
     "win": {
       "target": "nsis"
     },
