@@ -2947,27 +2947,31 @@ export default function App() {
                     </button>
                   ))}
                 </div>
-                <div className="grid grid-cols-2 gap-2 mt-2">
-                  <a 
-                    href={windowsDownloadUrl}
-                    className="flex flex-col items-center justify-center gap-1 py-3 px-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors text-xs font-bold"
-                  >
-                    <span>הורדה למחשב</span>
-                    <Download size={16} />
-                  </a>
+                <div className="mt-4">
+                  {(!config.platform || config.platform === 'computer') && (
+                    <a 
+                      href={windowsDownloadUrl}
+                      className="w-full flex items-center justify-center gap-2 py-4 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 text-lg font-bold"
+                    >
+                      <Download size={24} />
+                      <span>הורדה למחשב</span>
+                    </a>
+                  )}
                   
-                  <button 
-                    onClick={handleInstallClick}
-                    className="flex flex-col items-center justify-center gap-1 py-3 px-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors text-xs font-bold"
-                  >
-                    <span>הורדה לטלפון</span>
-                    <Smartphone size={16} />
-                  </button>
+                  {config.platform === 'phone' && (
+                    <button 
+                      onClick={handleInstallClick}
+                      className="w-full flex items-center justify-center gap-2 py-4 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 text-lg font-bold"
+                    >
+                      <Smartphone size={24} />
+                      <span>להוריד לטלפון</span>
+                    </button>
+                  )}
 
                   {updateStatus?.status === 'downloaded' && (
                     <button 
                       onClick={() => (window as any).updateAPI?.applyUpdate()}
-                      className="col-span-2 mt-2 flex flex-col items-center justify-center gap-1 py-3 px-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors text-xs font-bold animate-pulse"
+                      className="w-full mt-3 flex flex-col items-center justify-center gap-1 py-3 px-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-colors text-sm font-bold animate-pulse shadow-lg"
                     >
                       <span>עדכון חדש מוכן! לחץ להפעלה מחדש</span>
                     </button>
