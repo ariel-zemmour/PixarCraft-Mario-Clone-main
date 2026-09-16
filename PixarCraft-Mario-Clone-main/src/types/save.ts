@@ -9,6 +9,7 @@ export interface GameConfig {
   powerUp: PowerUpType;
   speed: number;
   weapon: WeaponType;
+  platform?: 'computer' | 'phone';
 }
 
 export interface GameStats {

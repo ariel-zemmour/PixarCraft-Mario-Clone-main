@@ -168,6 +168,7 @@ export default function App() {
       powerUp: 'doubleJump',
       speed: 5,
       weapon: 'w1',
+      platform: 'computer'
     };
   });
   
@@ -720,19 +721,11 @@ export default function App() {
         setBlackScreenMessage(null);
         isPausedRef.current = false;
         playerHeartsRef.current = 3;
-        // Respawn at last checkpoint or start
-        if (lastCheckpointRef.current) {
-          playerRef.current.x = lastCheckpointRef.current.x;
-          playerRef.current.y = lastCheckpointRef.current.y;
-        } else {
-          playerRef.current.x = 50;
-          playerRef.current.y = 100;
-        }
-        playerRef.current.vx = 0;
-        playerRef.current.vy = 0;
-        isMouseDownRef.current = false;
-        hasFiredForCurrentClickRef.current = false;
-        cameraRef.current.x = Math.max(0, playerRef.current.x - 200);
+        // Restart the current level from its beginning
+        const currentScore = scoreRef.current;
+        lastCheckpointRef.current = null;
+        initLevel(levelRef.current, false);
+        scoreRef.current = currentScore;
       }, 2000);
     }
   };
@@ -1043,7 +1036,10 @@ export default function App() {
     for (const spike of spikesRef.current) {
       if (Math.abs(spike.x - p.x) > 1500) continue;
       if (checkCollision(p, spike)) {
-        handleDeath();
+        takeDamage(1);
+        if (invincibilityTimerRef.current === 60) {
+          p.vy = -10; // Bounce off spike
+        }
       }
     }
 
@@ -2708,6 +2704,62 @@ export default function App() {
     applySaveData(local);
   };
 
+  // --- Mobile Touch Controls Logic ---
+  const [aimJoyActive, setAimJoyActive] = useState(false);
+  const aimJoyCenter = useRef({ x: 0, y: 0 });
+
+  const handleMobileMoveStart = (dir: 'left' | 'right') => {
+    keysRef.current[dir === 'left' ? 'a' : 'd'] = true;
+  };
+  const handleMobileMoveEnd = (dir: 'left' | 'right') => {
+    keysRef.current[dir === 'left' ? 'a' : 'd'] = false;
+  };
+
+  const handleMobileJumpStart = () => {
+    keysRef.current['w'] = true;
+  };
+  const handleMobileJumpEnd = () => {
+    keysRef.current['w'] = false;
+  };
+
+  const handleAimTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!isPlayingRef.current) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    aimJoyCenter.current = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    setAimJoyActive(true);
+    updateAimFromTouch(e.touches[0]);
+  };
+
+  const handleAimTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!aimJoyActive || !isPlayingRef.current) return;
+    updateAimFromTouch(e.touches[0]);
+  };
+
+  const handleAimTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    setAimJoyActive(false);
+    isMouseDownRef.current = false;
+  };
+
+  const updateAimFromTouch = (touch: React.Touch) => {
+    const dx = touch.clientX - aimJoyCenter.current.x;
+    const dy = touch.clientY - aimJoyCenter.current.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    
+    const p = playerRef.current;
+    if (dist > 10) {
+      const aimDirX = dx / dist;
+      const aimDirY = dy / dist;
+      mouseRef.current = {
+        x: p.x + p.w / 2 + aimDirX * 400,
+        y: p.y + p.h / 2 + aimDirY * 400
+      };
+      p.facingRight = aimDirX >= 0;
+      isMouseDownRef.current = true;
+    } else {
+      isMouseDownRef.current = false;
+    }
+  };
+
   return (
     <div className="min-h-screen bg-zinc-900 text-zinc-100 flex flex-col items-center justify-center p-4 font-sans" dir="rtl">
       
@@ -2750,11 +2802,56 @@ export default function App() {
                 ref={canvasRef}
                 width={800}
                 height={400}
-                className={`w-full h-auto bg-black rounded-lg block ${isPlaying ? 'cursor-crosshair' : 'cursor-default'}`}
-                style={{ aspectRatio: '800/400' }}
-                onMouseDown={onCanvasMouseDown}
-                onMouseMove={onCanvasMouseMove}
+                className={`w-full h-auto bg-black rounded-lg block ${(isPlaying && config.platform !== 'phone') ? 'cursor-crosshair' : 'cursor-default'}`}
+                style={{ aspectRatio: '800/400', touchAction: 'none' }}
+                onMouseDown={config.platform !== 'phone' ? onCanvasMouseDown : undefined}
+                onMouseMove={config.platform !== 'phone' ? onCanvasMouseMove : undefined}
               />
+
+              {/* Mobile Touch Controls Overlay */}
+              {isPlaying && config.platform === 'phone' && (
+                <div className="absolute inset-0 pointer-events-none z-10 flex justify-between items-end p-4 pb-8" dir="ltr">
+                  {/* Left Side: Movement D-Pad */}
+                  <div className="flex gap-4 pointer-events-auto">
+                    <button
+                      className="w-16 h-16 bg-white/20 active:bg-white/40 rounded-full flex items-center justify-center backdrop-blur-sm border border-white/30 text-white text-2xl select-none"
+                      onTouchStart={(e) => { e.preventDefault(); handleMobileMoveStart('left'); }}
+                      onTouchEnd={(e) => { e.preventDefault(); handleMobileMoveEnd('left'); }}
+                    >
+                      ←
+                    </button>
+                    <button
+                      className="w-16 h-16 bg-white/20 active:bg-white/40 rounded-full flex items-center justify-center backdrop-blur-sm border border-white/30 text-white text-2xl select-none"
+                      onTouchStart={(e) => { e.preventDefault(); handleMobileMoveStart('right'); }}
+                      onTouchEnd={(e) => { e.preventDefault(); handleMobileMoveEnd('right'); }}
+                    >
+                      →
+                    </button>
+                  </div>
+
+                  {/* Right Side: Jump and Aim */}
+                  <div className="flex gap-6 items-end pointer-events-auto">
+                    <button
+                      className="w-16 h-16 bg-blue-500/40 active:bg-blue-500/60 rounded-full flex items-center justify-center backdrop-blur-sm border border-blue-400/50 text-white font-bold select-none mb-8"
+                      onTouchStart={(e) => { e.preventDefault(); handleMobileJumpStart(); }}
+                      onTouchEnd={(e) => { e.preventDefault(); handleMobileJumpEnd(); }}
+                    >
+                      Jump
+                    </button>
+                    
+                    {/* Aim Joystick Area */}
+                    <div 
+                      className="w-24 h-24 bg-red-500/20 rounded-full border-2 border-red-500/30 relative flex items-center justify-center"
+                      onTouchStart={handleAimTouchStart}
+                      onTouchMove={handleAimTouchMove}
+                      onTouchEnd={handleAimTouchEnd}
+                    >
+                      <div className={`w-10 h-10 bg-red-500/50 rounded-full absolute transition-opacity ${aimJoyActive ? 'opacity-100' : 'opacity-50'}`} />
+                      <div className="absolute -top-6 text-white/50 text-xs tracking-widest font-bold">AIM & FIRE</div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {blackScreenMessage && (
                 <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/95 text-white rounded-lg p-8">
@@ -2767,6 +2864,7 @@ export default function App() {
                         isPausedRef.current = false;
                         scoreRef.current = 0;
                         initLevel(1, true); // Reset gameplay progress and lives
+                        saveService.saveNow(getCurrentSaveSnapshot()); // Save immediately after reset
                         setIsPlaying(true);
                       }}
                       className="mt-4 px-8 py-3 bg-red-600 hover:bg-red-500 rounded text-xl font-bold transition-colors"
@@ -2795,6 +2893,28 @@ export default function App() {
               <div className="flex items-center gap-2 border-b border-zinc-700 pb-4">
                 <Settings className="text-blue-400" />
                 <h2 className="text-xl font-semibold">אפשרויות משחק</h2>
+              </div>
+
+              {/* Platform Selection */}
+              <div className="space-y-3">
+                <label className="block text-sm font-medium text-zinc-300">
+                  איך אתה משחק?
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(['computer', 'phone'] as const).map(p => (
+                    <button
+                      key={p}
+                      onClick={() => setConfig({...config, platform: p})}
+                      className={`py-2 px-1 rounded-lg text-sm border transition-colors ${
+                        (config.platform || 'computer') === p 
+                          ? 'bg-purple-500/20 border-purple-500 text-purple-300' 
+                          : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-500'
+                      }`}
+                    >
+                      {p === 'computer' ? '💻 מחשב' : '📱 טלפון'}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Question 1 */}
