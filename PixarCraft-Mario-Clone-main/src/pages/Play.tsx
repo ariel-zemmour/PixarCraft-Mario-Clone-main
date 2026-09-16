@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Settings, Play, RefreshCw, Pause, LogOut, Cloud } from 'lucide-react';
+import { 
+  Play, Pause, ShoppingCart, User as UserIcon, X, LogIn, Save, ArrowRight, Shield, Swords, Wand2, Zap, Heart,
+  Download, Smartphone
+} from 'lucide-react';
 import { authService } from '../services/authService';
 import { saveService, createDefaultSave } from '../services/saveService';
 import type { 
@@ -150,6 +153,35 @@ export default function App() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<'login' | 'signup'>('login');
   const [conflictData, setConflictData] = useState<ConflictData | null>(null);
+
+  // --- PWA Install State ---
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setDeferredPrompt(null);
+      }
+    } else {
+      // Fallback for iOS or already installed
+      alert('להתקנה ב-iPhone: לחץ על כפתור השיתוף בתחתית המסך ובחר "Add to Home Screen".');
+    }
+  };
+  
+  // URL for the latest Windows installer (hosted in our releases folder)
+  const windowsDownloadUrl = "https://ariel-zemmour.github.io/PixarCraft-Mario-Clone-main/releases/PixarCraft-Mario-Clone-Setup.exe";
+
   const [updateStatus, setUpdateStatus] = useState<{status: string, data?: any} | null>(null);
 
   useEffect(() => {
@@ -2914,6 +2946,32 @@ export default function App() {
                       {p === 'computer' ? '💻 מחשב' : '📱 טלפון'}
                     </button>
                   ))}
+                </div>
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                  <a 
+                    href={windowsDownloadUrl}
+                    className="flex flex-col items-center justify-center gap-1 py-3 px-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors text-xs font-bold"
+                  >
+                    <span>הורדה למחשב</span>
+                    <Download size={16} />
+                  </a>
+                  
+                  <button 
+                    onClick={handleInstallClick}
+                    className="flex flex-col items-center justify-center gap-1 py-3 px-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors text-xs font-bold"
+                  >
+                    <span>הורדה לטלפון</span>
+                    <Smartphone size={16} />
+                  </button>
+
+                  {updateStatus?.status === 'downloaded' && (
+                    <button 
+                      onClick={() => (window as any).updateAPI?.applyUpdate()}
+                      className="col-span-2 mt-2 flex flex-col items-center justify-center gap-1 py-3 px-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors text-xs font-bold animate-pulse"
+                    >
+                      <span>עדכון חדש מוכן! לחץ להפעלה מחדש</span>
+                    </button>
+                  )}
                 </div>
               </div>
 
