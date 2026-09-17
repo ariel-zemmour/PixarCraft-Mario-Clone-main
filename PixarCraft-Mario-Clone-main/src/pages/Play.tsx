@@ -2725,8 +2725,13 @@ export default function App() {
     requestRef.current = requestAnimationFrame(loop);
   };
 
+  // Run initLevel ONCE on mount so the background draws correctly
+  const hasInitRef = useRef(false);
   useEffect(() => {
-    initLevel(1, true);
+    if (!hasInitRef.current) {
+      initLevel(1, true);
+      hasInitRef.current = true;
+    }
     requestRef.current = requestAnimationFrame(loop);
     return () => {
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
