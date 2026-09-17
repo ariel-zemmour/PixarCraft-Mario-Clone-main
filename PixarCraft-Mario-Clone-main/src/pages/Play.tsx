@@ -982,9 +982,9 @@ export default function App() {
     }
   };
 
-  // Game Loop
+  // Main Game Loop Update
   const update = () => {
-    if (!isPlaying) return;
+    if (!isPlayingRef.current) return;
     if (isPausedRef.current) return;
     
     if (invincibilityTimerRef.current > 0) {
@@ -2927,7 +2927,7 @@ export default function App() {
       }
     }
     
-    if (!isPlaying) {
+    if (!isPlayingRef.current) {
       ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
       ctx.fillRect(0, 0, 800, 400);
       ctx.fillStyle = 'white';
