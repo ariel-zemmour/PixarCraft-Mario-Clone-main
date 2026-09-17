@@ -199,8 +199,14 @@ class SaveService {
       this.clearPendingOfflineSync();
       this.setStatus('saved', 'ההתקדמות נשמרה בענן!');
       return true;
-    } catch (err) {
+    } catch (err: any) {
       console.error("Cloud Save Error:", err);
+      // Alert the user so they know exactly what they missed in Firebase
+      if (err?.code === 'permission-denied') {
+        alert("שגיאת הרשאות ב-Firebase! אנא ודא שיצרת מסד נתונים מסוג Firestore והגדרת את חוקי האבטחה (Rules) כפי שהוסבר.");
+      } else if (err?.message?.includes('not found') || err?.code === 'not-found') {
+        alert("מסד הנתונים לא נמצא ב-Firebase! אנא ודא שלחצת על 'Create database' בתוך ה-Firestore Database.");
+      }
       this.markPendingOfflineSync(save);
       this.setStatus('error', 'שגיאת רשת - ההתקדמות שמורה מקומית');
       return false;
