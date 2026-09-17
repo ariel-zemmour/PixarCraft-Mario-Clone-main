@@ -3337,10 +3337,10 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Question 3 */}
+              {/* Question 2 */}
               <div className="space-y-3">
                 <label className="block text-sm font-medium text-zinc-300">
-                  3. מה הכוח המיוחד של הדמות?
+                  2. מה הכוח המיוחד של הדמות?
                 </label>
                 <div className="grid grid-cols-3 gap-2">
                   {(['doubleJump', 'dash', 'fireball'] as PowerUpType[]).map(p => (
@@ -3359,10 +3359,10 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Question 4 */}
+              {/* Question 3 */}
               <div className="space-y-3">
                 <label className="block text-sm font-medium text-zinc-300">
-                  4. מהירות הדובי (1-10)
+                  3. מהירות הדובי (1-10)
                 </label>
                 <div className="flex gap-1 h-8">
                   {Array.from({ length: 10 }).map((_, i) => {
