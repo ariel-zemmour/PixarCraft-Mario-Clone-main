@@ -179,8 +179,9 @@ export default function App() {
     }
   };
   
-  // URL for the latest Windows installer (hosted on GitHub Releases)
+  // URLs for the latest desktop installers (hosted on GitHub Releases)
   const windowsDownloadUrl = "https://github.com/ariel-zemmour/PixarCraft-Mario-Clone-main/releases/download/v1.0.2/Mario-Clone-Setup.exe";
+  const macDownloadUrl = "https://github.com/ariel-zemmour/PixarCraft-Mario-Clone-main/releases/download/v1.0.2/Mario-Clone.dmg";
 
   const [updateStatus, setUpdateStatus] = useState<{status: string, data?: any} | null>(null);
 
@@ -3285,13 +3286,28 @@ export default function App() {
                 </div>
                 <div className="mt-4">
                   {(!config.platform || config.platform === 'computer') && (
-                    <a 
-                      href={windowsDownloadUrl}
-                      className="w-full flex items-center justify-center gap-2 py-4 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 text-lg font-bold"
-                    >
-                      <Download size={24} />
-                      <span>הורדה למחשב</span>
-                    </a>
+                    <div className="flex flex-col gap-3">
+                      <div className="grid grid-cols-2 gap-2">
+                        <a
+                          href={windowsDownloadUrl}
+                          className="flex flex-col items-center justify-center gap-1 py-3 px-2 bg-blue-700 hover:bg-blue-600 text-white rounded-xl transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 font-bold text-sm"
+                        >
+                          <Download size={20} />
+                          <span>🪟 Windows</span>
+                        </a>
+                        <a
+                          href={macDownloadUrl}
+                          className="flex flex-col items-center justify-center gap-1 py-3 px-2 bg-zinc-600 hover:bg-zinc-500 text-white rounded-xl transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 font-bold text-sm"
+                        >
+                          <Download size={20} />
+                          <span>🍎 Mac</span>
+                        </a>
+                      </div>
+                      <p className="text-xs text-zinc-400 text-center leading-relaxed">
+                        האפליקציה מתעדכנת אוטומטית כשיש גרסה חדשה.<br/>
+                        <span className="text-emerald-400">🔄 תמיד תהיה לך הגרסה האחרונה!</span>
+                      </p>
+                    </div>
                   )}
                   
                   {config.platform === 'phone' && (
