@@ -1398,6 +1398,7 @@ export default function App() {
         }
 
         // 2. Ledge Lookahead (Patrol AI only; charging creepers continue pursuit)
+        const wasGrounded = enemy.isGrounded;
         if (enemy.isGrounded && enemy.state !== 'charging') {
           const probeDist = (enemy.vx || 0) > 0 ? enemy.w + 4 : -4;
           const probeX = enemy.x + probeDist;
