@@ -697,17 +697,18 @@ export default function App() {
   };
 
   const takeDamage = (amount: number) => {
-    if (invincibilityTimerRef.current > 0) return;
+    if (invincibilityTimerRef.current > 0 || isPausedRef.current) return;
     
     playerHeartsRef.current -= amount;
-    if (playerHeartsRef.current > 0) {
-      invincibilityTimerRef.current = 60;
-    } else {
+    invincibilityTimerRef.current = 60; // Always set invincibility to prevent multiple hits in same frame
+    
+    if (playerHeartsRef.current <= 0) {
       handleDeath();
     }
   };
 
   const handleDeath = () => {
+    if (isPausedRef.current) return; // Prevent multiple death triggers
     keysRef.current = {}; // Clear stuck keys
     livesRef.current -= 1;
     
