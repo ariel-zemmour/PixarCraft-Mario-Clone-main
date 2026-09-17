@@ -1973,12 +1973,37 @@ export default function App() {
     const drawStartX = cameraRef.current.x - 500;
     const drawEndX = cameraRef.current.x + 1500;
     
+    const env = configRef.current.environment || 'day';
     platformsRef.current.forEach(plat => {
       if (plat.x + plat.w < drawStartX || plat.x > drawEndX) return;
-      ctx.fillStyle = '#8B4513'; // Dirt brown
-      ctx.fillRect(plat.x, plat.y, plat.w, plat.h);
-      ctx.fillStyle = '#228B22'; // Grass green
-      ctx.fillRect(plat.x, plat.y, plat.w, 10);
+      if (env === 'water') {
+        ctx.fillStyle = '#C2B280'; // Sand base
+        ctx.fillRect(plat.x, plat.y, plat.w, plat.h);
+        ctx.fillStyle = '#FF7F50'; // Coral pink top
+        ctx.fillRect(plat.x, plat.y, plat.w, 10);
+        
+        // Sea flowers / anemones details
+        ctx.fillStyle = '#FF69B4';
+        for (let i = plat.x; i < plat.x + plat.w - 20; i += 40) {
+          ctx.beginPath();
+          ctx.arc(i + 20, plat.y + 5, 7, Math.PI, 0);
+          ctx.fill();
+        }
+        ctx.fillStyle = '#9370DB'; // Purple coral
+        for (let i = plat.x + 20; i < plat.x + plat.w - 20; i += 50) {
+          ctx.fillRect(i, plat.y - 5, 8, 15);
+        }
+      } else if (env === 'tunnels') {
+        ctx.fillStyle = '#555555'; // Stone block
+        ctx.fillRect(plat.x, plat.y, plat.w, plat.h);
+        ctx.fillStyle = '#444444'; // Dark stone top
+        ctx.fillRect(plat.x, plat.y, plat.w, 10);
+      } else {
+        ctx.fillStyle = '#8B4513'; // Dirt brown
+        ctx.fillRect(plat.x, plat.y, plat.w, plat.h);
+        ctx.fillStyle = '#228B22'; // Grass green
+        ctx.fillRect(plat.x, plat.y, plat.w, 10);
+      }
     });
     
     // Draw Spikes
