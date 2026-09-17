@@ -2516,8 +2516,8 @@ export default function App() {
     ctx.fill();
     
     // Environment Gear
-    const env = configRef.current.environment || 'day';
-    if (env === 'water') {
+    const playerEnv = configRef.current.environment || 'day';
+    if (playerEnv === 'water') {
       // Diving goggles/mask
       ctx.fillStyle = 'rgba(0, 191, 255, 0.5)';
       ctx.beginPath();
@@ -2536,7 +2536,7 @@ export default function App() {
       ctx.fillStyle = '#FF4500'; // Valve
       ctx.fillRect(tankX + 1, p.y + 8, 4, 3);
       
-    } else if (env === 'tunnels') {
+    } else if (playerEnv === 'tunnels') {
       // Miner helmet
       ctx.fillStyle = '#FFCC00'; // Yellow helmet
       ctx.beginPath();
