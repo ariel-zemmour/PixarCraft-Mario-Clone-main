@@ -179,8 +179,8 @@ export default function App() {
     }
   };
   
-  // URL for the latest Windows installer (hosted in our releases folder)
-  const windowsDownloadUrl = "https://ariel-zemmour.github.io/PixarCraft-Mario-Clone-main/releases/PixarCraft-Mario-Clone-Setup.exe";
+  // URL for the latest Windows installer (hosted on GitHub Releases)
+  const windowsDownloadUrl = "https://github.com/ariel-zemmour/PixarCraft-Mario-Clone-main/releases/download/v1.0.2/Mario-Clone-Setup.exe";
 
   const [updateStatus, setUpdateStatus] = useState<{status: string, data?: any} | null>(null);
 

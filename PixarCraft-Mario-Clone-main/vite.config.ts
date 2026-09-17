@@ -9,7 +9,7 @@ import electron from 'vite-plugin-electron/simple';
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
   return {
-    base: './',
+    base: '/PixarCraft-Mario-Clone-main/',
     plugins: [
       react(), 
       tailwindcss(),

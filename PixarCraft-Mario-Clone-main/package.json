@@ -2,6 +2,7 @@
   "name": "react-example",
   "author": "Ariel",
   "description": "PixarCraft Mario Clone",
+  "homepage": "https://ariel-zemmour.github.io/PixarCraft-Mario-Clone-main/",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -9,9 +10,10 @@
   "scripts": {
     "dev": "vite --port=3201 --host=0.0.0.0",
     "build": "vite build && npm run electron:compile && npm run electron:build",
+    "build:web": "vite build",
     "electron:compile": "npx esbuild electron/main.ts electron/preload.ts --bundle --platform=node --format=esm --outdir=dist-electron --external:electron --external:electron-updater",
     "electron:build": "electron-builder --win",
-    "deploy": "npm run build && npx gh-pages -d dist",
+    "deploy": "npm run build:web && npx gh-pages -d dist",
     "preview": "vite preview",
     "clean": "rm -rf dist dist-electron",
     "lint": "tsc --noEmit"
@@ -32,8 +34,9 @@
       "target": "nsis"
     },
     "publish": {
-      "provider": "generic",
-      "url": "https://ariel-zemmour.github.io/PixarCraft-Mario-Clone-main/releases"
+      "provider": "github",
+      "owner": "ariel-zemmour",
+      "repo": "PixarCraft-Mario-Clone-main"
     }
   },
   "devDependencies": {
