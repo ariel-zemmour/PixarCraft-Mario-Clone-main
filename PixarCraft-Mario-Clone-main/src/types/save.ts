@@ -1,5 +1,5 @@
 export type CollectibleType = 'coins' | 'diamonds' | 'rabbits';
-export type EnemyType = 'slimes' | 'zombies' | 'rabbits' | 'ghosts' | 'skeletons' | 'creepers';
+export type EnemyType = 'slimes' | 'zombies' | 'rabbits' | 'ghosts' | 'skeletons' | 'creepers' | 'fish' | 'sharks' | 'bats' | 'spiders';
 export type PowerUpType = 'doubleJump' | 'dash' | 'fireball';
 export type WeaponType = 'w1' | 'w2' | 'w3' | 'w4' | 'w5' | 'w6' | 'w7' | 'w8' | 'w9' | 'w10' | 'w11' | 'w12' | 'w13' | 'w14' | 'w15' | 'w16' | 'w17' | 'w18' | 'w19' | 'w20';
 
@@ -10,6 +10,7 @@ export interface GameConfig {
   speed: number;
   weapon: WeaponType;
   platform?: 'computer' | 'phone';
+  environment?: 'day' | 'water' | 'tunnels';
 }
 
 export interface GameStats {

@@ -16,7 +16,9 @@ export function createDefaultSave(): GameSaveData {
       enemy: 'slimes',
       powerUp: 'doubleJump',
       speed: 5,
-      weapon: 'w1'
+      weapon: 'w1',
+      platform: 'computer',
+      environment: 'day'
     },
     stats: {
       highScore: 0,

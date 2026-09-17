@@ -36,9 +36,9 @@ interface WeaponInfo {
 }
 
 // --- Game Engine ---
-const GRAVITY = 0.8;
-const JUMP_FORCE = -14;
-const MAX_FALL_SPEED = 18;
+const DEFAULT_GRAVITY = 0.8;
+const DEFAULT_JUMP_FORCE = -14;
+const DEFAULT_MAX_FALL_SPEED = 18;
 
 const WEAPONS: WeaponInfo[] = [
   { id: 'w1', name: 'אקדח חלוד', cost: 0, desc: 'הכי גרוע שיש, איטי מאוד', cooldown: 1000, speed: 10, count: 1, color: '#444', type: 'pistol' },
@@ -412,6 +412,10 @@ export default function App() {
       case 'rabbits': return { w: 28, h: 26 };
       case 'slimes': return { w: 30, h: 26 };
       case 'ghosts': return { w: 30, h: 30 };
+      case 'fish': return { w: 24, h: 16 };
+      case 'sharks': return { w: 40, h: 22 };
+      case 'bats': return { w: 26, h: 20 };
+      case 'spiders': return { w: 32, h: 20 };
       default: return { w: 28, h: 32 };
     }
   };
@@ -500,6 +504,14 @@ export default function App() {
 
     // Helper to naturally mix enemy types with player preference
     const getPlatformEnemyType = (rnd: number): EnemyType => {
+      const env = configRef.current.environment || 'day';
+      if (env === 'water') {
+        return rnd < 0.7 ? 'fish' : 'sharks';
+      }
+      if (env === 'tunnels') {
+        return rnd < 0.6 ? 'spiders' : 'bats';
+      }
+      
       if (rnd < 0.65) return config.enemy;
       const otherEnemies = ALL_ENEMIES.filter(e => e !== config.enemy);
       return otherEnemies[Math.floor(rnd * 100) % otherEnemies.length];
@@ -562,7 +574,7 @@ export default function App() {
         for (let ei = 0; ei < count; ei++) {
           const eRnd = nextRandom();
           const enemyType = getPlatformEnemyType(eRnd);
-          const isFlying = enemyType === 'ghosts';
+          const isFlying = enemyType === 'ghosts' || enemyType === 'fish' || enemyType === 'sharks' || enemyType === 'bats';
           const dims = getEnemyDimensions(enemyType);
           const spacing = (platW - 40) / Math.max(1, count);
           const enemyX = currentX + 20 + ei * spacing;
@@ -877,11 +889,11 @@ export default function App() {
           // airplane mode handled in update
         } else {
           if (playerRef.current.isGrounded) {
-            playerRef.current.vy = JUMP_FORCE;
+            playerRef.current.vy = configRef.current.environment === 'water' ? -8 : DEFAULT_JUMP_FORCE;
             playerRef.current.isGrounded = false;
             playerRef.current.canDoubleJump = configRef.current.powerUp === 'doubleJump';
           } else if (playerRef.current.canDoubleJump) {
-            playerRef.current.vy = JUMP_FORCE;
+            playerRef.current.vy = configRef.current.environment === 'water' ? -8 : DEFAULT_JUMP_FORCE;
             playerRef.current.canDoubleJump = false;
           }
         }
@@ -1042,8 +1054,10 @@ export default function App() {
       }
     } else {
       // Apply gravity
-      p.vy += GRAVITY;
-      if (p.vy > MAX_FALL_SPEED) p.vy = MAX_FALL_SPEED;
+      const gravity = configRef.current.environment === 'water' ? 0.3 : DEFAULT_GRAVITY;
+      const maxFallSpeed = configRef.current.environment === 'water' ? 6 : DEFAULT_MAX_FALL_SPEED;
+      p.vy += gravity;
+      if (p.vy > maxFallSpeed) p.vy = maxFallSpeed;
     }
     
     // Move X
@@ -1414,9 +1428,10 @@ export default function App() {
         }
 
         // 4. Vertical Physics & Gravity
-        const wasGrounded = enemy.isGrounded;
-        enemy.vy = (enemy.vy || 0) + GRAVITY;
-        if (enemy.vy > MAX_FALL_SPEED) enemy.vy = MAX_FALL_SPEED;
+        const gravity = configRef.current.environment === 'water' ? 0.3 : DEFAULT_GRAVITY;
+        const maxFallSpeed = configRef.current.environment === 'water' ? 6 : DEFAULT_MAX_FALL_SPEED;
+        enemy.vy = (enemy.vy || 0) + gravity;
+        if (enemy.vy > maxFallSpeed) enemy.vy = maxFallSpeed;
 
         const prevY = enemy.y;
         enemy.y += enemy.vy;
@@ -1467,7 +1482,8 @@ export default function App() {
         if (p.vy > 0 && p.y + p.h < enemy.y + enemy.h * 0.6 && eType !== 'ghosts') {
           // Stomp
           enemy.dead = true;
-          p.vy = JUMP_FORCE * 0.8;
+          const jumpForce = configRef.current.environment === 'water' ? -8 : DEFAULT_JUMP_FORCE;
+          p.vy = jumpForce * 0.8;
           scoreRef.current += 100;
           statsRef.current.enemiesDefeated += 1;
         } else {
@@ -1861,25 +1877,71 @@ export default function App() {
 
     // Clear & Background
     if (levelRef.current === 1) {
-      ctx.fillStyle = '#87CEEB'; // Minecraft sky blue
-      ctx.fillRect(0, 0, 800, 400);
+      const env = configRef.current.environment || 'day';
       
-      ctx.save();
-      ctx.translate(-cameraRef.current.x, -cameraRef.current.y);
-      
-      // Draw Minecraft Clouds
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-      const cloudPositions = [
-        { x: 100, y: 50, w: 120, h: 40 },
-        { x: 400, y: 80, w: 150, h: 50 },
-        { x: 700, y: 40, w: 100, h: 30 },
-        { x: 1100, y: 60, w: 140, h: 40 },
-      ];
-      cloudPositions.forEach(c => {
-        // Blocky clouds
-        ctx.fillRect(c.x, c.y, c.w, c.h);
-        ctx.fillRect(c.x + 20, c.y - 20, c.w - 40, c.h + 40);
-      });
+      if (env === 'day') {
+        ctx.fillStyle = '#87CEEB'; // Minecraft sky blue
+        ctx.fillRect(0, 0, 800, 400);
+        
+        ctx.save();
+        ctx.translate(-cameraRef.current.x, -cameraRef.current.y);
+        
+        // Draw Minecraft Clouds
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        const cloudPositions = [
+          { x: 100, y: 50, w: 120, h: 40 },
+          { x: 400, y: 80, w: 150, h: 50 },
+          { x: 700, y: 40, w: 100, h: 30 },
+          { x: 1100, y: 60, w: 140, h: 40 },
+        ];
+        cloudPositions.forEach(c => {
+          // Blocky clouds
+          ctx.fillRect(c.x, c.y, c.w, c.h);
+          ctx.fillRect(c.x + 20, c.y - 20, c.w - 40, c.h + 40);
+        });
+      } else if (env === 'water') {
+        // Underwater Background
+        const grad = ctx.createLinearGradient(0, 0, 0, 400);
+        grad.addColorStop(0, '#0277BD'); // Light blue surface
+        grad.addColorStop(1, '#012642'); // Dark deep water
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 800, 400);
+        
+        // Procedural Bubbles
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+        const time = Date.now() / 1000;
+        for (let i = 0; i < 30; i++) {
+          const startX = (i * 73) % 800;
+          const speedY = 20 + (i % 30);
+          const y = 400 - ((time * speedY + i * 11) % 400);
+          const x = startX + Math.sin(time * 2 + i) * 15;
+          const size = 2 + (i % 4);
+          
+          ctx.beginPath();
+          ctx.arc(x, y, size, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        
+        ctx.save();
+        ctx.translate(-cameraRef.current.x, -cameraRef.current.y);
+      } else if (env === 'tunnels') {
+        // Tunnels Background
+        ctx.fillStyle = '#1a1a1a'; // Very dark gray cave
+        ctx.fillRect(0, 0, 800, 400);
+        
+        // Procedural stone texture (subtle)
+        ctx.fillStyle = '#222';
+        for (let i = 0; i < 100; i++) {
+          const rockX = (i * 91) % 800;
+          const rockY = (i * 71) % 400;
+          const w = 20 + (i % 40);
+          const h = 20 + ((i*3) % 30);
+          ctx.fillRect(rockX, rockY, w, h);
+        }
+        
+        ctx.save();
+        ctx.translate(-cameraRef.current.x, -cameraRef.current.y);
+      }
     } else {
       // Level 2 Background (Cool Space/Neon)
       const grad = ctx.createLinearGradient(0, 0, 0, 400);
@@ -2209,6 +2271,123 @@ export default function App() {
         ctx.fillStyle = e.state === 'charging' ? '#990000' : '#008800';
         ctx.fillRect(e.x + 2, e.y + 28, 10, 8); // Left foot
         ctx.fillRect(e.x + 16, e.y + 28, 10, 8); // Right foot
+      } else if (eType === 'fish') {
+        // Fish (w: 24, h: 16)
+        ctx.fillStyle = '#FFA500'; // Orange fish
+        ctx.beginPath();
+        ctx.ellipse(e.x + e.w/2, e.y + e.h/2, e.w/2, e.h/2, 0, 0, Math.PI*2);
+        ctx.fill();
+        // Tail
+        ctx.beginPath();
+        if (e.vx > 0) {
+          ctx.moveTo(e.x, e.y + e.h/2);
+          ctx.lineTo(e.x - 8, e.y);
+          ctx.lineTo(e.x - 8, e.y + e.h);
+        } else {
+          ctx.moveTo(e.x + e.w, e.y + e.h/2);
+          ctx.lineTo(e.x + e.w + 8, e.y);
+          ctx.lineTo(e.x + e.w + 8, e.y + e.h);
+        }
+        ctx.fill();
+        // Eye
+        ctx.fillStyle = 'white';
+        ctx.beginPath();
+        ctx.arc(e.vx > 0 ? e.x + e.w - 6 : e.x + 6, e.y + 6, 2, 0, Math.PI*2);
+        ctx.fill();
+      } else if (eType === 'sharks') {
+        // Sharks (w: 40, h: 22)
+        ctx.fillStyle = '#778899'; // Slate gray
+        ctx.beginPath();
+        ctx.ellipse(e.x + e.w/2, e.y + e.h/2 + 2, e.w/2, e.h/2 - 2, 0, 0, Math.PI*2);
+        ctx.fill();
+        // Dorsal fin
+        ctx.beginPath();
+        ctx.moveTo(e.x + e.w/2, e.y + 2);
+        ctx.lineTo(e.x + e.w/2 - (e.vx > 0 ? 8 : -8), e.y - 8);
+        ctx.lineTo(e.x + e.w/2 + (e.vx > 0 ? 4 : -4), e.y + 10);
+        ctx.fill();
+        // Tail
+        ctx.beginPath();
+        if (e.vx > 0) {
+          ctx.moveTo(e.x, e.y + e.h/2);
+          ctx.lineTo(e.x - 10, e.y);
+          ctx.lineTo(e.x - 10, e.y + e.h);
+        } else {
+          ctx.moveTo(e.x + e.w, e.y + e.h/2);
+          ctx.lineTo(e.x + e.w + 10, e.y);
+          ctx.lineTo(e.x + e.w + 10, e.y + e.h);
+        }
+        ctx.fill();
+        // Eye & Teeth
+        ctx.fillStyle = 'black';
+        ctx.fillRect(e.vx > 0 ? e.x + e.w - 10 : e.x + 8, e.y + 8, 3, 3);
+        ctx.fillStyle = 'white';
+        ctx.fillRect(e.vx > 0 ? e.x + e.w - 12 : e.x + 8, e.y + 16, 6, 2);
+      } else if (eType === 'bats') {
+        // Bats (w: 26, h: 20)
+        ctx.fillStyle = '#333333';
+        // Body
+        ctx.beginPath();
+        ctx.ellipse(e.x + e.w/2, e.y + e.h/2, 6, 8, 0, 0, Math.PI*2);
+        ctx.fill();
+        // Wings (flapping based on time)
+        const flap = Math.sin(Date.now() / 100) > 0;
+        ctx.beginPath();
+        if (flap) {
+          ctx.moveTo(e.x + e.w/2, e.y + e.h/2);
+          ctx.lineTo(e.x, e.y);
+          ctx.lineTo(e.x, e.y + 10);
+          ctx.moveTo(e.x + e.w/2, e.y + e.h/2);
+          ctx.lineTo(e.x + e.w, e.y);
+          ctx.lineTo(e.x + e.w, e.y + 10);
+        } else {
+          ctx.moveTo(e.x + e.w/2, e.y + e.h/2);
+          ctx.lineTo(e.x - 4, e.y + e.h);
+          ctx.lineTo(e.x - 4, e.y + e.h - 10);
+          ctx.moveTo(e.x + e.w/2, e.y + e.h/2);
+          ctx.lineTo(e.x + e.w + 4, e.y + e.h);
+          ctx.lineTo(e.x + e.w + 4, e.y + e.h - 10);
+        }
+        ctx.fill();
+        // Eyes
+        ctx.fillStyle = 'red';
+        ctx.fillRect(e.x + e.w/2 - 3, e.y + e.h/2 - 4, 2, 2);
+        ctx.fillRect(e.x + e.w/2 + 1, e.y + e.h/2 - 4, 2, 2);
+      } else if (eType === 'spiders') {
+        // Spiders (w: 32, h: 20)
+        ctx.fillStyle = '#1A1A1A';
+        // Body
+        ctx.beginPath();
+        ctx.ellipse(e.x + e.w/2, e.y + 14, 10, 6, 0, 0, Math.PI*2);
+        ctx.fill();
+        // Head
+        ctx.beginPath();
+        ctx.arc(e.vx > 0 ? e.x + e.w - 10 : e.x + 10, e.y + 12, 5, 0, Math.PI*2);
+        ctx.fill();
+        // Legs (animated)
+        const walk = Math.sin(e.x / 5) > 0;
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        const centerX = e.x + e.w/2;
+        const baseY = e.y + 14;
+        for(let i=0; i<4; i++) {
+          const offset = i * 4 - 6;
+          // Left legs
+          ctx.moveTo(centerX, baseY);
+          ctx.lineTo(centerX - 10 + (walk ? 2 : -2), baseY - 6);
+          ctx.lineTo(centerX - 16, e.y + 20);
+          // Right legs
+          ctx.moveTo(centerX, baseY);
+          ctx.lineTo(centerX + 10 + (!walk ? 2 : -2), baseY - 6);
+          ctx.lineTo(centerX + 16, e.y + 20);
+        }
+        ctx.stroke();
+        // Eyes
+        ctx.fillStyle = 'red';
+        const eyeX = e.vx > 0 ? e.x + e.w - 8 : e.x + 6;
+        ctx.fillRect(eyeX, e.y + 10, 2, 2);
+        ctx.fillRect(eyeX + 3, e.y + 10, 2, 2);
       }
     });
 
@@ -2308,6 +2487,57 @@ export default function App() {
     ctx.arc(p.x + p.w/2 - 7 + lookDir, p.y + 11, 0.8, 0, Math.PI * 2);
     ctx.arc(p.x + p.w/2 + 5 + lookDir, p.y + 11, 0.8, 0, Math.PI * 2);
     ctx.fill();
+    
+    // Environment Gear
+    const env = configRef.current.environment || 'day';
+    if (env === 'water') {
+      // Diving goggles/mask
+      ctx.fillStyle = 'rgba(0, 191, 255, 0.5)';
+      ctx.beginPath();
+      ctx.roundRect(p.x + p.w/2 - 12 + lookDir, p.y + 8, 24, 10, 4);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      
+      // Oxygen tank on back
+      ctx.fillStyle = '#C0C0C0';
+      const tankX = p.facingRight ? p.x - 6 : p.x + p.w + 2;
+      ctx.beginPath();
+      ctx.roundRect(tankX, p.y + 10, 6, 18, 3);
+      ctx.fill();
+      ctx.fillStyle = '#FF4500'; // Valve
+      ctx.fillRect(tankX + 1, p.y + 8, 4, 3);
+      
+    } else if (env === 'tunnels') {
+      // Miner helmet
+      ctx.fillStyle = '#FFCC00'; // Yellow helmet
+      ctx.beginPath();
+      ctx.arc(p.x + p.w/2, p.y + 5, 14, Math.PI, 0); // Dome
+      ctx.fill();
+      ctx.fillRect(p.x + p.w/2 - 16, p.y + 5, 32, 3); // Brim
+      
+      // Headlamp
+      ctx.fillStyle = '#EEEEEE';
+      const lampX = p.facingRight ? p.x + p.w/2 + 10 : p.x + p.w/2 - 14;
+      ctx.fillRect(lampX, p.y, 4, 6);
+      ctx.fillStyle = '#FFFFCC'; // Light bulb
+      ctx.fillRect(p.facingRight ? lampX + 4 : lampX - 2, p.y + 1, 2, 4);
+      
+      // Light beam
+      ctx.fillStyle = 'rgba(255, 255, 150, 0.15)';
+      ctx.beginPath();
+      if (p.facingRight) {
+        ctx.moveTo(lampX + 6, p.y + 3);
+        ctx.lineTo(lampX + 80, p.y - 15);
+        ctx.lineTo(lampX + 80, p.y + 25);
+      } else {
+        ctx.moveTo(lampX - 2, p.y + 3);
+        ctx.lineTo(lampX - 80, p.y - 15);
+        ctx.lineTo(lampX - 80, p.y + 25);
+      }
+      ctx.fill();
+    }
     
     // Draw Gun based on equipped weapon
     const currentWeapon = WEAPONS.find(w => w.id === config.weapon);
@@ -2952,6 +3182,28 @@ export default function App() {
               <div className="flex items-center gap-2 border-b border-zinc-700 pb-4">
                 <Settings className="text-blue-400" />
                 <h2 className="text-xl font-semibold">אפשרויות משחק</h2>
+              </div>
+
+              {/* Environment Selection */}
+              <div className="space-y-3">
+                <label className="block text-sm font-medium text-zinc-300">
+                  באיזה סביבה לשחק?
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['day', 'water', 'tunnels'] as const).map(env => (
+                    <button
+                      key={env}
+                      onClick={() => setConfig({...config, environment: env})}
+                      className={`py-2 px-1 rounded-lg text-sm border transition-colors ${
+                        (config.environment || 'day') === env 
+                          ? 'bg-blue-500/20 border-blue-500 text-blue-300' 
+                          : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-500'
+                      }`}
+                    >
+                      {env === 'day' ? '☀️ יום' : env === 'water' ? '🌊 מים' : '🕳️ מנהרות'}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Platform Selection */}
