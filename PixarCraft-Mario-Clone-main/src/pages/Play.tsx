@@ -3295,13 +3295,26 @@ export default function App() {
                   )}
                   
                   {config.platform === 'phone' && (
-                    <button 
-                      onClick={handleInstallClick}
-                      className="w-full flex items-center justify-center gap-2 py-4 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 text-lg font-bold"
-                    >
-                      <Smartphone size={24} />
-                      <span>להוריד לטלפון</span>
-                    </button>
+                    <div className="flex flex-col gap-3">
+                      <button 
+                        onClick={handleInstallClick}
+                        className={`w-full flex items-center justify-center gap-2 py-4 px-4 text-white rounded-xl transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 text-lg font-bold ${
+                          deferredPrompt
+                            ? 'bg-emerald-600 hover:bg-emerald-500 animate-pulse'
+                            : 'bg-blue-600 hover:bg-blue-500'
+                        }`}
+                      >
+                        <Smartphone size={24} />
+                        <span>{deferredPrompt ? '📲 התקן עכשיו!' : 'להוריד לטלפון'}</span>
+                      </button>
+                      <p className="text-xs text-zinc-400 text-center leading-relaxed">
+                        {deferredPrompt
+                          ? '✅ המשחק מוכן להתקנה! לחץ כדי להוסיף למסך הבית.'
+                          : 'ℹ️ אם אין כפתור, פתח את תפריט הדפדפן ובחר "הוסף למסך הבית".'}
+                        <br />
+                        <span className="text-emerald-400">🔄 המשחק מתעדכן אוטומטית כשיש שינויים!</span>
+                      </p>
+                    </div>
                   )}
 
                   {updateStatus?.status === 'downloaded' && (
