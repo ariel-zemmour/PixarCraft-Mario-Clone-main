@@ -3337,28 +3337,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Question 2 */}
-              <div className="space-y-3">
-                <label className="block text-sm font-medium text-zinc-300">
-                  2. אילו אויבים תרצה?
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  {(['slimes', 'zombies', 'rabbits', 'ghosts', 'skeletons', 'creepers'] as EnemyType[]).map(e => (
-                    <button
-                      key={e}
-                      onClick={() => setConfig({...config, enemy: e})}
-                      className={`py-2 px-1 rounded-lg text-sm border transition-colors ${
-                        config.enemy === e 
-                          ? 'bg-green-500/20 border-green-500 text-green-300' 
-                          : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-500'
-                      }`}
-                    >
-                      {e === 'slimes' ? 'סליים' : e === 'zombies' ? 'זומבים' : e === 'rabbits' ? 'ארנבים' : e === 'ghosts' ? 'רוחות' : e === 'skeletons' ? 'שלדים' : 'קריפרים'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               {/* Question 3 */}
               <div className="space-y-3">
                 <label className="block text-sm font-medium text-zinc-300">
