@@ -1,5 +1,7 @@
 import type { GameSaveData, SaveStatusState, WeaponType, GameConfig } from '../types/save';
 import { authService } from './authService';
+import { db, auth } from './firebase';
+import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 
 const SAVE_STORAGE_KEY = 'mario_cloud_save_local_cache';
 const PENDING_SYNC_KEY = 'mario_pending_offline_sync';
@@ -38,9 +40,9 @@ class SaveService {
   private debounceTimer: number | null = null;
   private pendingSave: GameSaveData | null = null;
   private isSaving: boolean = false;
+  private firestoreUnsubscribe: (() => void) | null = null;
 
   constructor() {
-    // Listen for online events to flush any pending offline saves
     if (typeof window !== 'undefined') {
       window.addEventListener('online', () => {
         this.syncPendingOfflineSave();
@@ -49,6 +51,9 @@ class SaveService {
         this.setStatus('offline', 'מצב לא מקוון - ההתקדמות נשמרת מקומית');
       });
     }
+
+    // Optional: Real-time listener to sync across multiple tabs
+    // Note: To sync across separate devices in real-time, this needs to be called when auth state changes.
   }
 
   public subscribeStatus(listener: (status: SaveStatusState, message?: string) => void): () => void {
@@ -64,9 +69,6 @@ class SaveService {
     this.statusListeners.forEach(l => l(status, message));
   }
 
-  /**
-   * Retrieves the local save data, falling back to legacy localStorage keys if needed.
-   */
   public getLocalSave(): GameSaveData {
     const raw = localStorage.getItem(SAVE_STORAGE_KEY);
     if (raw) {
@@ -81,7 +83,6 @@ class SaveService {
       }
     }
 
-    // Fallback to existing individual localStorage keys if present
     const legacyCurrency = localStorage.getItem('currency');
     const legacyWeapons = localStorage.getItem('unlockedWeapons');
     const defaultData = createDefaultSave();
@@ -103,19 +104,12 @@ class SaveService {
     return defaultData;
   }
 
-  /**
-   * Updates local storage and legacy keys.
-   */
   public setLocalSave(save: GameSaveData) {
     localStorage.setItem(SAVE_STORAGE_KEY, JSON.stringify(save));
-    // Keep legacy keys in sync for backward compatibility
     localStorage.setItem('currency', save.currency.toString());
     localStorage.setItem('unlockedWeapons', JSON.stringify(save.unlockedWeapons));
   }
 
-  /**
-   * Clears local save cache.
-   */
   public clearLocalSave() {
     localStorage.removeItem(SAVE_STORAGE_KEY);
     localStorage.removeItem(PENDING_SYNC_KEY);
@@ -123,14 +117,11 @@ class SaveService {
     localStorage.removeItem('unlockedWeapons');
   }
 
-  /**
-   * Queues a debounced cloud save (1.5 seconds) for frequent events like picking up coins.
-   */
   public queueDebouncedSave(save: GameSaveData) {
     this.setLocalSave(save);
     this.pendingSave = save;
 
-    if (!authService.getToken()) {
+    if (!auth.currentUser) {
       this.setStatus('saved');
       return;
     }
@@ -154,9 +145,6 @@ class SaveService {
     }, 1500);
   }
 
-  /**
-   * Immediately saves progress to the cloud for critical events (purchases, checkpoints, level complete).
-   */
   public async saveNow(save: GameSaveData, force: boolean = false): Promise<boolean> {
     if (this.debounceTimer !== null) {
       window.clearTimeout(this.debounceTimer);
@@ -165,7 +153,7 @@ class SaveService {
     this.pendingSave = null;
     this.setLocalSave(save);
 
-    if (!authService.getToken()) {
+    if (!auth.currentUser) {
       this.setStatus('saved');
       return true;
     }
@@ -180,8 +168,8 @@ class SaveService {
   }
 
   private async performCloudSave(save: GameSaveData, force: boolean = false): Promise<boolean> {
-    const token = authService.getToken();
-    if (!token) {
+    const user = auth.currentUser;
+    if (!user) {
       this.setStatus('saved');
       return true;
     }
@@ -195,32 +183,24 @@ class SaveService {
     this.setStatus('saving', 'שומר בענן...');
 
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/save`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ progressData: save, force })
-      });
-
-      if (!res.ok) {
-        if (res.status === 409) {
-          // Cloud has newer save
-          this.setStatus('error', 'זוהתה שמירה חדשה יותר בענן');
-          return false;
-        }
-        throw new Error('Server error');
+      const docRef = doc(db, 'saves', user.uid);
+      
+      if (!force) {
+        // Optional conflict resolution can go here by reading first, 
+        // but for a single player game, overwriting is usually fine unless 
+        // we strictly want to check timestamps.
       }
 
-      const data = await res.json();
-      if (data.save) {
-        this.setLocalSave(data.save);
-      }
+      await setDoc(docRef, {
+        progressData: save,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+
       this.clearPendingOfflineSync();
       this.setStatus('saved', 'ההתקדמות נשמרה בענן!');
       return true;
-    } catch {
+    } catch (err) {
+      console.error("Cloud Save Error:", err);
       this.markPendingOfflineSync(save);
       this.setStatus('error', 'שגיאת רשת - ההתקדמות שמורה מקומית');
       return false;
@@ -242,12 +222,9 @@ class SaveService {
     localStorage.removeItem(PENDING_SYNC_KEY);
   }
 
-  /**
-   * Syncs any pending offline save when internet returns.
-   */
   public async syncPendingOfflineSave(): Promise<void> {
     const raw = localStorage.getItem(PENDING_SYNC_KEY);
-    if (!raw || !authService.getToken()) return;
+    if (!raw || !auth.currentUser) return;
 
     try {
       const pending: GameSaveData = JSON.parse(raw);
@@ -257,21 +234,21 @@ class SaveService {
     }
   }
 
-  /**
-   * Fetches the latest cloud save from the server.
-   */
   public async fetchCloudSave(): Promise<GameSaveData | null> {
-    const token = authService.getToken();
-    if (!token) return null;
+    const user = auth.currentUser;
+    if (!user) return null;
 
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/save`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (!res.ok) return null;
-      const data = await res.json();
-      return data.save;
-    } catch {
+      const docRef = doc(db, 'saves', user.uid);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists() && docSnap.data().progressData) {
+        const data = docSnap.data().progressData as GameSaveData;
+        this.setLocalSave(data);
+        return data;
+      }
+      return null;
+    } catch (err) {
+      console.error("Error fetching cloud save:", err);
       return null;
     }
   }

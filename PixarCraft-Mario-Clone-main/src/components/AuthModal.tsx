@@ -92,13 +92,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       }
       const res = await authService.requestPasswordReset(email.trim());
       setSuccessMessage(res.message);
-      if (res.code) {
-        // Automatically prefill code in development
-        setResetCode(res.code);
-      }
-      setMode('reset');
+      // Firebase uses an email link instead of a code.
+      // Do not transition to "reset" mode. Keep them here or tell them to check email.
     } catch (err: any) {
-      setError(err.message || 'שגיאה בשליחת קוד איפוס.');
+      setError(err.message || 'שגיאה בשליחת בקשת איפוס סיסמה.');
     } finally {
       setLoading(false);
     }

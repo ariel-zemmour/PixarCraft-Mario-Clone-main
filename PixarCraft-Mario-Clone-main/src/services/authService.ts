@@ -1,31 +1,28 @@
 import type { User, GameSaveData } from '../types/save';
 import { createDefaultSave } from './saveService';
+import { auth, db } from './firebase';
+import { 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  signOut, 
+  sendPasswordResetEmail,
+  onAuthStateChanged
+} from 'firebase/auth';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 const TOKEN_KEY = 'mario_auth_token';
-const MOCK_DB_KEY = 'mario_mock_db'; // Stores { users: [], sessions: {} }
 
-// --- MOCK BACKEND HELPERS ---
-const getMockDb = () => {
-  try {
-    const db = localStorage.getItem(MOCK_DB_KEY);
-    return db ? JSON.parse(db) : { users: [], sessions: {} };
-  } catch {
-    return { users: [], sessions: {} };
-  }
-};
+// Keep track of the current auth state
+let currentFirebaseUser: any = null;
 
-const saveMockDb = (db: any) => {
-  localStorage.setItem(MOCK_DB_KEY, JSON.stringify(db));
-};
-
-const generateMockToken = () => Math.random().toString(36).substring(2) + Date.now().toString(36);
-const generateMockCode = () => Math.floor(100000 + Math.random() * 900000).toString();
-
-// ---------------------------
+// Listen to auth changes
+onAuthStateChanged(auth, (user) => {
+  currentFirebaseUser = user;
+});
 
 export const authService = {
   getToken(): string | null {
-    return localStorage.getItem(TOKEN_KEY);
+    return localStorage.getItem(TOKEN_KEY) || (currentFirebaseUser ? 'firebase-auth' : null);
   },
 
   setToken(token: string) {
@@ -37,38 +34,34 @@ export const authService = {
   },
 
   async getCurrentUser(): Promise<{ user: User | null; save: GameSaveData | null }> {
-    const token = this.getToken();
-    if (!token) return { user: null, save: null };
-
-    const apiUrl = import.meta.env.VITE_API_URL;
-    if (!apiUrl) {
-      // Mock Backend
-      const db = getMockDb();
-      const session = db.sessions[token];
-      if (!session) {
-        this.clearToken();
-        return { user: null, save: null };
-      }
-      const user = db.users.find((u: any) => u.id === session.userId);
-      if (!user) return { user: null, save: null };
-      return { user: { id: user.id, email: user.email }, save: user.save };
+    // Wait for auth to initialize if we don't know the state yet, but don't block forever
+    if (auth.currentUser === null && this.getToken() === 'firebase-auth') {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    
+    const firebaseUser = auth.currentUser || currentFirebaseUser;
+    
+    if (!firebaseUser) {
+      this.clearToken();
+      return { user: null, save: null };
     }
 
     try {
-      const res = await fetch(`${apiUrl}/api/auth/me`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (!res.ok) {
-        if (res.status === 401) {
-          this.clearToken();
-        }
-        return { user: null, save: null };
+      // Fetch user's save from Firestore
+      const docRef = doc(db, 'saves', firebaseUser.uid);
+      const docSnap = await getDoc(docRef);
+      
+      let save = null;
+      if (docSnap.exists()) {
+        save = docSnap.data().progressData as GameSaveData;
       }
-
-      const data = await res.json();
-      return { user: data.user, save: data.save };
-    } catch {
+      
+      return { 
+        user: { id: firebaseUser.uid as unknown as number, email: firebaseUser.email || '' }, 
+        save 
+      };
+    } catch (err) {
+      console.error("Error fetching user data from Firestore:", err);
       return { user: null, save: null };
     }
   },
@@ -82,164 +75,88 @@ export const authService = {
     if (password !== confirmPassword) throw new Error('הסיסמאות אינן תואמות.');
     if (password.length < 6) throw new Error('הסיסמה חייבת להכיל לפחות 6 תווים.');
 
-    const apiUrl = import.meta.env.VITE_API_URL;
-    if (!apiUrl) {
-      // Mock Backend
-      const db = getMockDb();
-      if (db.users.find((u: any) => u.email === email.toLowerCase())) {
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email.toLowerCase(), password);
+      const firebaseUser = userCredential.user;
+      
+      const initialSave = guestSave || createDefaultSave();
+      
+      // Save initial data to Firestore
+      await setDoc(doc(db, 'saves', firebaseUser.uid), {
+        progressData: initialSave,
+        updatedAt: new Date().toISOString()
+      });
+
+      this.setToken('firebase-auth');
+      return { 
+        user: { id: firebaseUser.uid as unknown as number, email: firebaseUser.email || '' }, 
+        save: initialSave 
+      };
+    } catch (error: any) {
+      console.error(error);
+      if (error.code === 'auth/email-already-in-use') {
         throw new Error('כתובת האימייל הזו כבר רשומה במערכת.');
       }
-      
-      const newUser = {
-        id: Date.now(),
-        email: email.toLowerCase(),
-        password, // Mock storage
-        save: guestSave || createDefaultSave(),
-        resetCode: null,
-      };
-      db.users.push(newUser);
-      
-      const token = generateMockToken();
-      db.sessions[token] = { userId: newUser.id };
-      saveMockDb(db);
-      
-      this.setToken(token);
-      return { user: { id: newUser.id, email: newUser.email }, save: newUser.save };
+      throw new Error('שגיאה ביצירת החשבון.');
     }
-
-    const res = await fetch(`${apiUrl}/api/auth/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, confirmPassword, guestSave: guestSave || undefined })
-    });
-
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'שגיאה ביצירת החשבון.');
-
-    this.setToken(data.token);
-    return { user: data.user, save: data.save };
   },
 
   async login(email: string, password: string): Promise<{ user: User; save: GameSaveData }> {
-    const apiUrl = import.meta.env.VITE_API_URL;
-    if (!apiUrl) {
-      // Mock Backend
-      const db = getMockDb();
-      const user = db.users.find((u: any) => u.email === email.toLowerCase() && u.password === password);
-      if (!user) throw new Error('אימייל או סיסמה שגויים.');
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email.toLowerCase(), password);
+      const firebaseUser = userCredential.user;
       
-      const token = generateMockToken();
-      db.sessions[token] = { userId: user.id };
-      saveMockDb(db);
+      this.setToken('firebase-auth');
       
-      this.setToken(token);
-      return { user: { id: user.id, email: user.email }, save: user.save };
+      // Fetch save
+      const docRef = doc(db, 'saves', firebaseUser.uid);
+      const docSnap = await getDoc(docRef);
+      
+      let save = createDefaultSave();
+      if (docSnap.exists()) {
+        save = docSnap.data().progressData as GameSaveData;
+      } else {
+        // Create document if it doesn't exist for some reason
+        await setDoc(docRef, {
+          progressData: save,
+          updatedAt: new Date().toISOString()
+        });
+      }
+
+      return { 
+        user: { id: firebaseUser.uid as unknown as number, email: firebaseUser.email || '' }, 
+        save 
+      };
+    } catch (error: any) {
+      console.error(error);
+      throw new Error('אימייל או סיסמה שגויים.');
     }
-
-    const res = await fetch(`${apiUrl}/api/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
-    });
-
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'שגיאה בהתחברות.');
-
-    this.setToken(data.token);
-    return { user: data.user, save: data.save };
   },
 
   async logout(): Promise<void> {
-    const token = this.getToken();
-    if (token) {
-      const apiUrl = import.meta.env.VITE_API_URL;
-      if (!apiUrl) {
-        const db = getMockDb();
-        delete db.sessions[token];
-        saveMockDb(db);
-      } else {
-        try {
-          await fetch(`${apiUrl}/api/auth/logout`, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
-        } catch {}
-      }
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error("Error signing out:", error);
     }
     this.clearToken();
   },
 
   async requestPasswordReset(email: string): Promise<{ message: string; code?: string }> {
-    const apiUrl = import.meta.env.VITE_API_URL;
-    if (!apiUrl) {
-      // Mock Backend
-      const db = getMockDb();
-      const user = db.users.find((u: any) => u.email === email.toLowerCase());
-      if (user) {
-        const code = generateMockCode();
-        user.resetCode = code;
-        saveMockDb(db);
-        // Simulate email delivery by showing an alert to the user so they know what code to type
-        setTimeout(() => {
-          alert(`📧 הדמיית אימייל נשלחה!\n\nהודעה חדשה בתיבת המייל של ${user.email}:\n"קוד איפוס הסיסמה שלך למשחק אריאל הוא: ${code}"`);
-        }, 500);
-      }
-      return { success: true, message: 'אם החשבון קיים, קוד איפוס סיסמה נוצר בהצלחה וישלח למייל.' } as any;
+    try {
+      await sendPasswordResetEmail(auth, email.toLowerCase());
+      // Returning a message to show the user. We return "success" so the UI thinks it worked.
+      return { success: true, message: 'מייל איפוס סיסמה נשלח בהצלחה לכתובת שהזנת.' } as any;
+    } catch (error: any) {
+      console.error(error);
+      // We don't want to leak if an email exists or not, so we just say success anyway (best practice)
+      return { success: true, message: 'אם החשבון קיים, מייל איפוס סיסמה נשלח בהצלחה.' } as any;
     }
-
-    const res = await fetch(`${apiUrl}/api/auth/forgot-password`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email })
-    });
-
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'שגיאה בשליחת בקשת איפוס.');
-    
-    // In actual dev backend, code might be returned for convenience
-    if (data.code) {
-      setTimeout(() => {
-        alert(`📧 הודעת מערכת (פיתוח):\nקוד האיפוס שנוצר הוא: ${data.code}`);
-      }, 500);
-    }
-    return data;
   },
 
+  // Note: With Firebase, users click a link in their email to reset the password, they don't enter a code on the site.
+  // The UI currently expects a code. We will throw an error telling them to check their email link instead.
   async resetPassword(email: string, code: string, newPassword: string, confirmPassword: string): Promise<string> {
-    if (newPassword !== confirmPassword) throw new Error('הסיסמאות אינן תואמות.');
-    if (newPassword.length < 6) throw new Error('הסיסמה חייבת להכיל לפחות 6 תווים.');
-
-    const apiUrl = import.meta.env.VITE_API_URL;
-    if (!apiUrl) {
-      // Mock Backend
-      const db = getMockDb();
-      const user = db.users.find((u: any) => u.email === email.toLowerCase());
-      if (!user) throw new Error('שגיאה באיפוס הסיסמה.');
-      
-      if (user.resetCode !== code.trim()) {
-        throw new Error('קוד האיפוס שגוי או שפג תוקפו.');
-      }
-      
-      user.password = newPassword;
-      user.resetCode = null;
-      // Invalidate all sessions
-      Object.keys(db.sessions).forEach(k => {
-        if (db.sessions[k].userId === user.id) delete db.sessions[k];
-      });
-      saveMockDb(db);
-      
-      return 'הסיסמה שונתה בהצלחה!';
-    }
-
-    const res = await fetch(`${apiUrl}/api/auth/reset-password`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, code, newPassword, confirmPassword })
-    });
-
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'שגיאה באיפוס הסיסמה.');
-
-    return data.message || 'הסיסמה שונתה בהצלחה!';
+    throw new Error('נא ללחוץ על הקישור המאובטח שנשלח לך במייל כדי לאפס את הסיסמה.');
   }
 };
