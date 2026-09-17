@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Play, Pause, ShoppingCart, User as UserIcon, X, LogIn, Save, ArrowRight, Shield, Swords, Wand2, Zap, Heart,
-  Download, Smartphone
+  Download, Smartphone, Settings, LogOut
 } from 'lucide-react';
 import { authService } from '../services/authService';
 import { saveService, createDefaultSave } from '../services/saveService';
