@@ -469,6 +469,7 @@ export default function App() {
       lastCheckpointRef.current = null;
     }
     levelRef.current = level;
+    isPausedRef.current = false;
     playerRef.current = { x: 50, y: 100, w: 30, h: 40, vx: 0, vy: 0, isGrounded: false, canDoubleJump: false, facingRight: true, airplaneTimer: 0 };
     cameraRef.current = { x: 0, y: 0 };
     scoreRef.current = 0;
