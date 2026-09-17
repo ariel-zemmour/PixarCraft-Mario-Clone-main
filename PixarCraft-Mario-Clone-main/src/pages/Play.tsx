@@ -753,10 +753,27 @@ export default function App() {
         setBlackScreenMessage(null);
         isPausedRef.current = false;
         playerHeartsRef.current = 3;
-        // Restart the current level from its beginning
+        // Restart the current level but preserve the furthest checkpoint
         const currentScore = scoreRef.current;
-        lastCheckpointRef.current = null;
-        initLevel(levelRef.current, false);
+        const savedCheckpoint = lastCheckpointRef.current;
+        
+        initLevel(levelRef.current, false); // Rebuilds the level, enemies, etc.
+        
+        if (savedCheckpoint) {
+          lastCheckpointRef.current = savedCheckpoint; // Restore the farthest checkpoint
+          playerRef.current.x = savedCheckpoint.x;
+          playerRef.current.y = savedCheckpoint.y;
+          // Position camera so player is visible
+          cameraRef.current.x = Math.max(0, savedCheckpoint.x - 400); 
+          
+          // Visually update all checkpoints up to this one to be collected
+          checkpointsRef.current.forEach(cp => {
+            if (cp.x <= savedCheckpoint.x) {
+              cp.collected = true;
+            }
+          });
+        }
+        
         scoreRef.current = currentScore;
       }, 2000);
     }
