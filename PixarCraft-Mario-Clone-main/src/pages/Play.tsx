@@ -2846,6 +2846,8 @@ export default function App() {
               {!showConfig && (
                 <button 
                   onClick={() => setIsPlaying(!isPlaying)}
+                  onMouseUp={(e) => e.currentTarget.blur()}
+                  onKeyDown={(e) => e.preventDefault()}
                   className="absolute top-4 right-4 bg-zinc-900/60 hover:bg-zinc-900/90 text-white p-2 rounded-lg backdrop-blur-sm transition-all z-20 border border-white/10"
                   title={isPlaying ? "עצור" : "המשך"}
                 >
@@ -2934,6 +2936,8 @@ export default function App() {
               <div className="absolute inset-0 flex items-center justify-center">
                 <button 
                   onClick={() => setIsPlaying(true)}
+                  onMouseUp={(e) => e.currentTarget.blur()}
+                  onKeyDown={(e) => e.preventDefault()}
                   className="bg-green-500 hover:bg-green-600 text-white rounded-full p-4 shadow-lg transition-transform hover:scale-105"
                 >
                   <Play size={32} />
