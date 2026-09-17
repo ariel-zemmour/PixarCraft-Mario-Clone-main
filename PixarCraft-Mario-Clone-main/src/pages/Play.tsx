@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Play, Pause, ShoppingCart, User as UserIcon, X, LogIn, Save, ArrowRight, Shield, Swords, Wand2, Zap, Heart,
-  Download, Smartphone, Settings, LogOut
+  Download, Smartphone, Settings, LogOut, Maximize, Minimize
 } from 'lucide-react';
 import { authService } from '../services/authService';
 import { saveService, createDefaultSave } from '../services/saveService';
@@ -205,6 +205,8 @@ export default function App() {
   });
   
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const gameContainerRef = useRef<HTMLDivElement>(null);
   const [showConfig, setShowConfig] = useState(true);
   const [showShop, setShowShop] = useState(false);
   const [blackScreenMessage, setBlackScreenMessage] = useState<string | null>(null);
@@ -383,6 +385,15 @@ export default function App() {
     window.addEventListener('beforeunload', handleUnload);
     return () => window.removeEventListener('beforeunload', handleUnload);
   }, [getCurrentSaveSnapshot]);
+
+  // Sync fullscreen state with the browser (e.g., when user presses Escape)
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
 
   const livesRef = useRef(3);
   const playerHeartsRef = useRef(3);
@@ -3098,7 +3109,7 @@ export default function App() {
 
         <div className="flex flex-col lg:flex-row gap-6">
           {/* Game Canvas Container */}
-            <div className="flex-1 bg-zinc-800 p-2 rounded-xl shadow-2xl border border-zinc-700 relative overflow-hidden">
+            <div ref={gameContainerRef} className="flex-1 bg-zinc-800 p-2 rounded-xl shadow-2xl border border-zinc-700 relative overflow-hidden">
               {/* Pause/Play Toggle Button */}
               {!showConfig && (
                 <button 
@@ -3111,6 +3122,25 @@ export default function App() {
                   {isPlaying ? <Pause size={24} /> : <Play size={24} />}
                 </button>
               )}
+
+              {/* Fullscreen Toggle Button */}
+              <button
+                onClick={() => {
+                  if (!document.fullscreenElement) {
+                    gameContainerRef.current?.requestFullscreen();
+                    setIsFullscreen(true);
+                  } else {
+                    document.exitFullscreen();
+                    setIsFullscreen(false);
+                  }
+                }}
+                onMouseUp={(e) => e.currentTarget.blur()}
+                onKeyDown={(e) => e.preventDefault()}
+                className="absolute top-4 left-4 bg-zinc-900/60 hover:bg-zinc-900/90 text-white p-2 rounded-lg backdrop-blur-sm transition-all z-20 border border-white/10"
+                title={isFullscreen ? "צא ממסך מלא" : "מסך מלא"}
+              >
+                {isFullscreen ? <Minimize size={24} /> : <Maximize size={24} />}
+              </button>
 
               <canvas
                 ref={canvasRef}
