@@ -96,8 +96,12 @@ export const authService = {
       console.error(error);
       if (error.code === 'auth/email-already-in-use') {
         throw new Error('כתובת האימייל הזו כבר רשומה במערכת.');
+      } else if (error.code === 'auth/operation-not-allowed') {
+        throw new Error('לא אישרת הרשמה דרך אימייל ב-Firebase! כנס ל-Authentication -> Sign-in method ותדליק Email/Password.');
+      } else if (error.code === 'permission-denied') {
+        throw new Error('שגיאת הרשאות ב-Firestore. האם הגדרת את חוקי האבטחה (Rules) כפי שהוסבר?');
       }
-      throw new Error('שגיאה ביצירת החשבון.');
+      throw new Error('שגיאה ביצירת החשבון: ' + (error.message || error.code || ''));
     }
   },
 
