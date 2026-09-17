@@ -129,7 +129,10 @@ export const authService = {
       };
     } catch (error: any) {
       console.error(error);
-      throw new Error('אימייל או סיסמה שגויים.');
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
+        throw new Error('אימייל או סיסמה שגויים. (אם נרשמת בעבר, עליך להירשם מחדש כי עברנו לשרתי ענן חדשים!)');
+      }
+      throw new Error('שגיאה בהתחברות: ' + error.message);
     }
   },
 
@@ -145,12 +148,17 @@ export const authService = {
   async requestPasswordReset(email: string): Promise<{ message: string; code?: string }> {
     try {
       await sendPasswordResetEmail(auth, email.toLowerCase());
-      // Returning a message to show the user. We return "success" so the UI thinks it worked.
       return { success: true, message: 'מייל איפוס סיסמה נשלח בהצלחה לכתובת שהזנת.' } as any;
     } catch (error: any) {
       console.error(error);
-      // We don't want to leak if an email exists or not, so we just say success anyway (best practice)
-      return { success: true, message: 'אם החשבון קיים, מייל איפוס סיסמה נשלח בהצלחה.' } as any;
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/missing-email') {
+        throw new Error('חשבון זה לא קיים במערכת החדשה. כיוון שעברנו לשרתי Firebase, עליך להירשם מחדש!');
+      } else if (error.code === 'auth/invalid-email') {
+        throw new Error('כתובת אימייל לא תקינה.');
+      } else if (error.code === 'auth/operation-not-allowed') {
+        throw new Error('שגיאה ב-Firebase: לא הפעלת כניסת Email/Password בלשונית Authentication!');
+      }
+      throw new Error('שגיאה בשליחת המייל: ' + error.message);
     }
   },
 
