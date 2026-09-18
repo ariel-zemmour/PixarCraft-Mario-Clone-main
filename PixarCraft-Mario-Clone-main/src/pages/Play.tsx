@@ -655,7 +655,7 @@ export default function App() {
         spikesRef.current.push({ x: currentX + platW/2 - 50, y: platY - 20, w: 100, h: 20 });
       }
       
-      if (nextRandom() > 0.85) {
+      if (nextRandom() > 0.97) {
         blueCoinsRef.current.push({ x: currentX + platW/2, y: platY - 150, w: 20, h: 20, type: 'blueCoin' });
       }
 
