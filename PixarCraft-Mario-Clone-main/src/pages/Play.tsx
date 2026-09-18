@@ -3174,17 +3174,17 @@ export default function App() {
                   <div className="flex gap-4 pointer-events-auto">
                     <button
                       className="w-16 h-16 bg-white/20 active:bg-white/40 rounded-full flex items-center justify-center backdrop-blur-sm border border-white/30 text-white text-2xl select-none"
-                      onPointerDown={(e) => { e.preventDefault(); handleMobileMoveStart('left'); }}
-                      onPointerUp={(e) => { e.preventDefault(); handleMobileMoveEnd('left'); }}
-                      onPointerLeave={(e) => { e.preventDefault(); handleMobileMoveEnd('left'); }}
+                      onPointerDown={() => handleMobileMoveStart('left')}
+                      onPointerUp={() => handleMobileMoveEnd('left')}
+                      onPointerLeave={() => handleMobileMoveEnd('left')}
                     >
                       ←
                     </button>
                     <button
                       className="w-16 h-16 bg-white/20 active:bg-white/40 rounded-full flex items-center justify-center backdrop-blur-sm border border-white/30 text-white text-2xl select-none"
-                      onPointerDown={(e) => { e.preventDefault(); handleMobileMoveStart('right'); }}
-                      onPointerUp={(e) => { e.preventDefault(); handleMobileMoveEnd('right'); }}
-                      onPointerLeave={(e) => { e.preventDefault(); handleMobileMoveEnd('right'); }}
+                      onPointerDown={() => handleMobileMoveStart('right')}
+                      onPointerUp={() => handleMobileMoveEnd('right')}
+                      onPointerLeave={() => handleMobileMoveEnd('right')}
                     >
                       →
                     </button>
@@ -3194,9 +3194,9 @@ export default function App() {
                   <div className="flex gap-6 items-end pointer-events-auto">
                     <button
                       className="w-16 h-16 bg-blue-500/40 active:bg-blue-500/60 rounded-full flex items-center justify-center backdrop-blur-sm border border-blue-400/50 text-white font-bold select-none mb-8"
-                      onPointerDown={(e) => { e.preventDefault(); handleMobileJumpStart(); }}
-                      onPointerUp={(e) => { e.preventDefault(); handleMobileJumpEnd(); }}
-                      onPointerLeave={(e) => { e.preventDefault(); handleMobileJumpEnd(); }}
+                      onPointerDown={() => handleMobileJumpStart()}
+                      onPointerUp={() => handleMobileJumpEnd()}
+                      onPointerLeave={() => handleMobileJumpEnd()}
                     >
                       Jump
                     </button>
