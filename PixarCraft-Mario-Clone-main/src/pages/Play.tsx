@@ -893,23 +893,27 @@ export default function App() {
     return true;
   };
 
+  const triggerJump = () => {
+    if (playerRef.current.airplaneTimer > 0) {
+      // airplane mode handled in update
+    } else {
+      if (playerRef.current.isGrounded) {
+        playerRef.current.vy = configRef.current.environment === 'water' ? -8 : DEFAULT_JUMP_FORCE;
+        playerRef.current.isGrounded = false;
+        playerRef.current.canDoubleJump = configRef.current.powerUp === 'doubleJump';
+      } else if (playerRef.current.canDoubleJump) {
+        playerRef.current.vy = configRef.current.environment === 'water' ? -8 : DEFAULT_JUMP_FORCE;
+        playerRef.current.canDoubleJump = false;
+      }
+    }
+  };
+
   // ─── Keyboard Input (useEffect so we can add/remove properly) ───────────────
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       keysRef.current[e.code] = true;
       if ((e.code === 'Space' || e.code === 'ArrowUp') && isPlayingRef.current) {
-        if (playerRef.current.airplaneTimer > 0) {
-          // airplane mode handled in update
-        } else {
-          if (playerRef.current.isGrounded) {
-            playerRef.current.vy = configRef.current.environment === 'water' ? -8 : DEFAULT_JUMP_FORCE;
-            playerRef.current.isGrounded = false;
-            playerRef.current.canDoubleJump = configRef.current.powerUp === 'doubleJump';
-          } else if (playerRef.current.canDoubleJump) {
-            playerRef.current.vy = configRef.current.environment === 'water' ? -8 : DEFAULT_JUMP_FORCE;
-            playerRef.current.canDoubleJump = false;
-          }
-        }
+        triggerJump();
       }
       // Fireball
       if (e.code === 'KeyF' && isPlayingRef.current && configRef.current.powerUp === 'fireball') {
@@ -3042,13 +3046,7 @@ export default function App() {
   const handleMobileJumpStart = () => {
     keysRef.current['KeyW'] = true;
     keysRef.current['Space'] = true;
-    
-    // Dispatch a synthetic Spacebar press to exactly mimic PC controls
-    window.dispatchEvent(new KeyboardEvent('keydown', { 
-      code: 'Space', 
-      key: ' ',
-      bubbles: true 
-    }));
+    triggerJump();
   };
   const handleMobileJumpEnd = () => {
     keysRef.current['KeyW'] = false;
@@ -3062,6 +3060,9 @@ export default function App() {
     aimJoyCenter.current = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
     setAimJoyActive(true);
     updateAimFromPointer(e);
+    
+    // Explicitly call fireWeapon so non-automatic weapons fire immediately on tap
+    fireWeapon();
   };
 
   const handleAimPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
