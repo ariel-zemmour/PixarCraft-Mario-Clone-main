@@ -185,6 +185,16 @@ export default function App() {
 
   const [updateStatus, setUpdateStatus] = useState<{status: string, data?: any} | null>(null);
 
+  const isElectron = 'updateAPI' in window;
+  const isPWA = window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone;
+  const isMobileOS = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  
+  const isDesktopApp = isElectron;
+  const isMobileApp = isPWA && isMobileOS;
+  
+  const lockedPlatform = isDesktopApp ? 'computer' : (isMobileApp ? 'phone' : null);
+  const hideDownloads = isDesktopApp || isMobileApp;
+
   useEffect(() => {
     if ((window as any).updateAPI) {
       (window as any).updateAPI.onUpdateStatus((status: string, data?: any) => {
@@ -195,7 +205,7 @@ export default function App() {
 
   const [config, setConfig] = useState<GameConfig>(() => {
     const local = saveService.getLocalSave();
-    return local.config || {
+    const loaded = local.config || {
       collectible: 'coins',
       enemy: 'slimes',
       powerUp: 'doubleJump',
@@ -203,6 +213,13 @@ export default function App() {
       weapon: 'w1',
       platform: 'computer'
     };
+    
+    // Automatically default and lock platform if in specific environments
+    if (lockedPlatform) {
+      loaded.platform = lockedPlatform;
+    }
+    
+    return loaded;
   });
   
   const [isPlaying, setIsPlaying] = useState(false);
@@ -3403,26 +3420,31 @@ export default function App() {
               </div>
 
               {/* Platform Selection */}
-              <div className="space-y-3">
-                <label className="block text-sm font-medium text-zinc-300">
-                  איך אתה משחק?
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(['computer', 'phone'] as const).map(p => (
-                    <button
-                      key={p}
-                      onClick={() => setConfig({...config, platform: p})}
-                      className={`py-2 px-1 rounded-lg text-sm border transition-colors ${
-                        (config.platform || 'computer') === p 
-                          ? 'bg-purple-500/20 border-purple-500 text-purple-300' 
-                          : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-500'
-                      }`}
-                    >
-                      {p === 'computer' ? '💻 מחשב' : '📱 טלפון'}
-                    </button>
-                  ))}
+              {!lockedPlatform && (
+                <div className="space-y-3">
+                  <label className="block text-sm font-medium text-zinc-300">
+                    איך אתה משחק?
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(['computer', 'phone'] as const).map(p => (
+                      <button
+                        key={p}
+                        onClick={() => setConfig({...config, platform: p})}
+                        className={`py-2 px-1 rounded-lg text-sm border transition-colors ${
+                          (config.platform || 'computer') === p 
+                            ? 'bg-purple-500/20 border-purple-500 text-purple-300' 
+                            : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-500'
+                        }`}
+                      >
+                        {p === 'computer' ? '💻 מחשב' : '📱 טלפון'}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <div className="mt-4">
+              )}
+              
+              {!hideDownloads && (
+                <div className="mt-4 space-y-4">
                   {(!config.platform || config.platform === 'computer') && (
                     <div className="flex flex-col gap-3">
                       <div className="grid grid-cols-2 gap-2">
@@ -3480,7 +3502,7 @@ export default function App() {
                     </button>
                   )}
                 </div>
-              </div>
+              )}
 
               {/* Question 1 */}
               <div className="space-y-3">
