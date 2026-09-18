@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
@@ -28,6 +28,14 @@ jobs:
 
       - name: Build Web Version
         run: npm run build:web
+
+      - name: Compile Electron Script
+        run: npm run electron:compile
+
+      - name: Build and Publish Mac App
+        run: npx electron-builder --mac --publish always --c.mac.identity=null
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
