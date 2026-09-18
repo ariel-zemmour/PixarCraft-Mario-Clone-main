@@ -31,7 +31,12 @@
       "!dist/releases"
     ],
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "artifactName": "Mario-Clone-Setup.exe"
+    },
+    "mac": {
+      "target": "dmg",
+      "artifactName": "Mario-Clone.dmg"
     },
     "publish": {
       "provider": "github",

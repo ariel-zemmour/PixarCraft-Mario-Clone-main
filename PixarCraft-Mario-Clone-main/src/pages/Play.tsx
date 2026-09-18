@@ -180,8 +180,8 @@ export default function App() {
   };
   
   // URLs for the latest desktop installers (hosted on GitHub Releases)
-  const windowsDownloadUrl = "https://github.com/ariel-zemmour/PixarCraft-Mario-Clone-main/releases/download/v1.0.2/Mario-Clone-Setup.exe";
-  const macDownloadUrl = "https://github.com/ariel-zemmour/PixarCraft-Mario-Clone-main/releases/download/v1.0.2/Mario-Clone.dmg";
+  const windowsDownloadUrl = "https://github.com/ariel-zemmour/PixarCraft-Mario-Clone-main/releases/latest/download/Mario-Clone-Setup.exe";
+  const macDownloadUrl = "https://github.com/ariel-zemmour/PixarCraft-Mario-Clone-main/releases/latest/download/Mario-Clone.dmg";
 
   const [updateStatus, setUpdateStatus] = useState<{status: string, data?: any} | null>(null);
 
