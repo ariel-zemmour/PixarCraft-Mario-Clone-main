@@ -3033,40 +3033,42 @@ export default function App() {
   const aimJoyCenter = useRef({ x: 0, y: 0 });
 
   const handleMobileMoveStart = (dir: 'left' | 'right') => {
-    keysRef.current[dir === 'left' ? 'a' : 'd'] = true;
+    keysRef.current[dir === 'left' ? 'KeyA' : 'KeyD'] = true;
   };
   const handleMobileMoveEnd = (dir: 'left' | 'right') => {
-    keysRef.current[dir === 'left' ? 'a' : 'd'] = false;
+    keysRef.current[dir === 'left' ? 'KeyA' : 'KeyD'] = false;
   };
 
   const handleMobileJumpStart = () => {
-    keysRef.current['w'] = true;
+    keysRef.current['KeyW'] = true;
   };
   const handleMobileJumpEnd = () => {
-    keysRef.current['w'] = false;
+    keysRef.current['KeyW'] = false;
   };
 
-  const handleAimTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+  const handleAimPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!isPlayingRef.current) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
     const rect = e.currentTarget.getBoundingClientRect();
     aimJoyCenter.current = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
     setAimJoyActive(true);
-    updateAimFromTouch(e.touches[0]);
+    updateAimFromPointer(e);
   };
 
-  const handleAimTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+  const handleAimPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!aimJoyActive || !isPlayingRef.current) return;
-    updateAimFromTouch(e.touches[0]);
+    updateAimFromPointer(e);
   };
 
-  const handleAimTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+  const handleAimPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.currentTarget.releasePointerCapture(e.pointerId);
     setAimJoyActive(false);
     isMouseDownRef.current = false;
   };
 
-  const updateAimFromTouch = (touch: React.Touch) => {
-    const dx = touch.clientX - aimJoyCenter.current.x;
-    const dy = touch.clientY - aimJoyCenter.current.y;
+  const updateAimFromPointer = (e: React.PointerEvent<HTMLDivElement>) => {
+    const dx = e.clientX - aimJoyCenter.current.x;
+    const dy = e.clientY - aimJoyCenter.current.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
     
     const p = playerRef.current;
@@ -3155,20 +3157,22 @@ export default function App() {
 
               {/* Mobile Touch Controls Overlay */}
               {isPlaying && config.platform === 'phone' && (
-                <div className="absolute inset-0 pointer-events-none z-10 flex justify-between items-end p-4 pb-8" dir="ltr">
+                <div className="absolute inset-0 pointer-events-none z-10 flex justify-between items-end p-4 pb-8" dir="ltr" style={{ touchAction: 'none' }}>
                   {/* Left Side: Movement D-Pad */}
                   <div className="flex gap-4 pointer-events-auto">
                     <button
                       className="w-16 h-16 bg-white/20 active:bg-white/40 rounded-full flex items-center justify-center backdrop-blur-sm border border-white/30 text-white text-2xl select-none"
-                      onTouchStart={(e) => { e.preventDefault(); handleMobileMoveStart('left'); }}
-                      onTouchEnd={(e) => { e.preventDefault(); handleMobileMoveEnd('left'); }}
+                      onPointerDown={(e) => { e.preventDefault(); handleMobileMoveStart('left'); }}
+                      onPointerUp={(e) => { e.preventDefault(); handleMobileMoveEnd('left'); }}
+                      onPointerLeave={(e) => { e.preventDefault(); handleMobileMoveEnd('left'); }}
                     >
                       ←
                     </button>
                     <button
                       className="w-16 h-16 bg-white/20 active:bg-white/40 rounded-full flex items-center justify-center backdrop-blur-sm border border-white/30 text-white text-2xl select-none"
-                      onTouchStart={(e) => { e.preventDefault(); handleMobileMoveStart('right'); }}
-                      onTouchEnd={(e) => { e.preventDefault(); handleMobileMoveEnd('right'); }}
+                      onPointerDown={(e) => { e.preventDefault(); handleMobileMoveStart('right'); }}
+                      onPointerUp={(e) => { e.preventDefault(); handleMobileMoveEnd('right'); }}
+                      onPointerLeave={(e) => { e.preventDefault(); handleMobileMoveEnd('right'); }}
                     >
                       →
                     </button>
@@ -3178,18 +3182,20 @@ export default function App() {
                   <div className="flex gap-6 items-end pointer-events-auto">
                     <button
                       className="w-16 h-16 bg-blue-500/40 active:bg-blue-500/60 rounded-full flex items-center justify-center backdrop-blur-sm border border-blue-400/50 text-white font-bold select-none mb-8"
-                      onTouchStart={(e) => { e.preventDefault(); handleMobileJumpStart(); }}
-                      onTouchEnd={(e) => { e.preventDefault(); handleMobileJumpEnd(); }}
+                      onPointerDown={(e) => { e.preventDefault(); handleMobileJumpStart(); }}
+                      onPointerUp={(e) => { e.preventDefault(); handleMobileJumpEnd(); }}
+                      onPointerLeave={(e) => { e.preventDefault(); handleMobileJumpEnd(); }}
                     >
                       Jump
                     </button>
                     
                     {/* Aim Joystick Area */}
                     <div 
-                      className="w-24 h-24 bg-red-500/20 rounded-full border-2 border-red-500/30 relative flex items-center justify-center"
-                      onTouchStart={handleAimTouchStart}
-                      onTouchMove={handleAimTouchMove}
-                      onTouchEnd={handleAimTouchEnd}
+                      className="w-24 h-24 bg-red-500/20 rounded-full border-2 border-red-500/30 relative flex items-center justify-center touch-none"
+                      onPointerDown={handleAimPointerDown}
+                      onPointerMove={handleAimPointerMove}
+                      onPointerUp={handleAimPointerUp}
+                      onPointerCancel={handleAimPointerUp}
                     >
                       <div className={`w-10 h-10 bg-red-500/50 rounded-full absolute transition-opacity ${aimJoyActive ? 'opacity-100' : 'opacity-50'}`} />
                       <div className="absolute -top-6 text-white/50 text-xs tracking-widest font-bold">AIM & FIRE</div>
