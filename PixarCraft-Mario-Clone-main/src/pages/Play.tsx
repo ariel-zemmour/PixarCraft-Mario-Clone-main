@@ -390,11 +390,51 @@ export default function App() {
   // Sync fullscreen state with the browser (e.g., when user presses Escape)
   useEffect(() => {
     const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
+      const isNativeFullscreen = !!(document.fullscreenElement || (document as any).webkitFullscreenElement);
+      setIsFullscreen(isNativeFullscreen);
+      if (!isNativeFullscreen) {
+        // Clear fallback classes just in case native exit happened
+        gameContainerRef.current?.classList.remove('fixed', 'inset-0', 'z-[9999]', 'w-screen', 'h-screen', 'rounded-none');
+      }
     };
     document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+    };
   }, []);
+
+  const toggleFullscreen = async () => {
+    if (!isFullscreen) {
+      try {
+        if (gameContainerRef.current?.requestFullscreen) {
+          await gameContainerRef.current.requestFullscreen();
+        } else if ((gameContainerRef.current as any)?.webkitRequestFullscreen) {
+          await (gameContainerRef.current as any).webkitRequestFullscreen();
+        } else {
+          throw new Error('Native fullscreen not supported');
+        }
+      } catch (e) {
+        // Fallback for iOS Safari
+        gameContainerRef.current?.classList.add('fixed', 'inset-0', 'z-[9999]', 'w-screen', 'h-screen', 'rounded-none');
+        setIsFullscreen(true);
+      }
+    } else {
+      try {
+        if (document.fullscreenElement && document.exitFullscreen) {
+          await document.exitFullscreen();
+        } else if ((document as any).webkitFullscreenElement && (document as any).webkitExitFullscreen) {
+          await (document as any).webkitExitFullscreen();
+        }
+      } catch (e) {
+        console.log(e);
+      }
+      // Always remove fallback classes
+      gameContainerRef.current?.classList.remove('fixed', 'inset-0', 'z-[9999]', 'w-screen', 'h-screen', 'rounded-none');
+      setIsFullscreen(false);
+    }
+  };
 
   const livesRef = useRef(3);
   const playerHeartsRef = useRef(3);
@@ -3138,18 +3178,10 @@ export default function App() {
 
               {/* Fullscreen Toggle Button */}
               <button
-                onClick={() => {
-                  if (!document.fullscreenElement) {
-                    gameContainerRef.current?.requestFullscreen();
-                    setIsFullscreen(true);
-                  } else {
-                    document.exitFullscreen();
-                    setIsFullscreen(false);
-                  }
-                }}
-                onMouseUp={(e) => e.currentTarget.blur()}
-                onKeyDown={(e) => e.preventDefault()}
-                className="absolute top-4 left-4 bg-zinc-900/60 hover:bg-zinc-900/90 text-white p-2 rounded-lg backdrop-blur-sm transition-all z-20 border border-white/10"
+                onPointerDown={(e) => { e.preventDefault(); toggleFullscreen(); }}
+                onTouchStart={(e) => { e.preventDefault(); toggleFullscreen(); }}
+                onClick={(e) => { e.preventDefault(); toggleFullscreen(); }}
+                className="absolute top-4 left-4 bg-zinc-900/60 hover:bg-zinc-900/90 text-white p-2 rounded-lg backdrop-blur-sm transition-all z-20 border border-white/10 cursor-pointer touch-none"
                 title={isFullscreen ? "צא ממסך מלא" : "מסך מלא"}
               >
                 {isFullscreen ? <Minimize size={24} /> : <Maximize size={24} />}
