@@ -415,6 +415,16 @@ export default function App() {
         } else {
           throw new Error('Native fullscreen not supported');
         }
+        
+        // Try to lock orientation to landscape for mobile devices
+        try {
+          if (window.screen && window.screen.orientation && window.screen.orientation.lock) {
+            await window.screen.orientation.lock('landscape');
+          }
+        } catch (lockError) {
+          console.warn('Orientation lock failed:', lockError);
+        }
+        
       } catch (e) {
         // Fallback for iOS Safari
         gameContainerRef.current?.classList.add('fixed', 'inset-0', 'z-[9999]', 'w-screen', 'h-screen', 'rounded-none');
@@ -3235,7 +3245,7 @@ export default function App() {
 
         <div className="flex flex-col lg:flex-row gap-6">
           {/* Game Canvas Container */}
-            <div ref={gameContainerRef} className="flex-1 bg-zinc-800 p-2 rounded-xl shadow-2xl border border-zinc-700 relative overflow-hidden">
+            <div ref={gameContainerRef} className={`bg-zinc-800 relative overflow-hidden flex items-center justify-center ${isFullscreen ? 'w-screen h-screen rounded-none border-none p-0' : 'flex-1 p-2 rounded-xl shadow-2xl border border-zinc-700'}`}>
               {/* Pause/Play Toggle Button */}
               {!showConfig && (
                 <button 
@@ -3264,8 +3274,15 @@ export default function App() {
                 ref={canvasRef}
                 width={800}
                 height={400}
-                className={`w-full h-auto bg-black rounded-lg block ${(isPlaying && config.platform !== 'phone') ? 'cursor-crosshair' : 'cursor-default'}`}
-                style={{ aspectRatio: '800/400', touchAction: 'none' }}
+                className={`bg-black block ${(isPlaying && config.platform !== 'phone') ? 'cursor-crosshair' : 'cursor-default'} ${isFullscreen ? '' : 'rounded-lg'}`}
+                style={{ 
+                  aspectRatio: '800/400', 
+                  touchAction: 'none',
+                  maxWidth: '100%',
+                  maxHeight: '100%',
+                  width: isFullscreen ? 'auto' : '100%',
+                  height: 'auto'
+                }}
                 onMouseDown={config.platform !== 'phone' ? onCanvasMouseDown : undefined}
                 onMouseMove={config.platform !== 'phone' ? onCanvasMouseMove : undefined}
               />
