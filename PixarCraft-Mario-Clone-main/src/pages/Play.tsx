@@ -3076,11 +3076,51 @@ export default function App() {
   const [aimJoyActive, setAimJoyActive] = useState(false);
   const aimJoyCenter = useRef({ x: 0, y: 0 });
 
-  const handleMobileMoveStart = (dir: 'left' | 'right') => {
-    keysRef.current[dir === 'left' ? 'KeyA' : 'KeyD'] = true;
+  const [moveJoyActive, setMoveJoyActive] = useState(false);
+  const moveJoyCenter = useRef({ x: 0, y: 0 });
+
+  const updateMoveFromPointer = (e: React.PointerEvent<HTMLDivElement>) => {
+    const dx = e.clientX - moveJoyCenter.current.x;
+    const dy = e.clientY - moveJoyCenter.current.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    
+    if (dist > 10) {
+      const moveDirX = dx / dist;
+      if (moveDirX > 0.3) {
+        keysRef.current['KeyD'] = true;
+        keysRef.current['KeyA'] = false;
+      } else if (moveDirX < -0.3) {
+        keysRef.current['KeyA'] = true;
+        keysRef.current['KeyD'] = false;
+      } else {
+        keysRef.current['KeyA'] = false;
+        keysRef.current['KeyD'] = false;
+      }
+    } else {
+      keysRef.current['KeyA'] = false;
+      keysRef.current['KeyD'] = false;
+    }
   };
-  const handleMobileMoveEnd = (dir: 'left' | 'right') => {
-    keysRef.current[dir === 'left' ? 'KeyA' : 'KeyD'] = false;
+
+  const handleMovePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isPlayingRef.current) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const rect = e.currentTarget.getBoundingClientRect();
+    moveJoyCenter.current = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    setMoveJoyActive(true);
+    updateMoveFromPointer(e);
+  };
+
+  const handleMovePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!moveJoyActive || !isPlayingRef.current) return;
+    updateMoveFromPointer(e);
+  };
+
+  const handleMovePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.currentTarget.releasePointerCapture(e.pointerId);
+    setMoveJoyActive(false);
+    keysRef.current['KeyA'] = false;
+    keysRef.current['KeyD'] = false;
   };
 
   const handleMobileJumpStart = () => {
@@ -3200,24 +3240,21 @@ export default function App() {
               {/* Mobile Touch Controls Overlay */}
               {isPlaying && config.platform === 'phone' && (
                 <div className="absolute inset-0 pointer-events-none z-10 flex justify-between items-end p-4 pb-8" dir="ltr" style={{ touchAction: 'none' }}>
-                  {/* Left Side: Movement D-Pad */}
+                  {/* Left Side: Movement Joystick */}
                   <div className="flex gap-4 pointer-events-auto">
-                    <button
-                      className="w-16 h-16 bg-white/20 active:bg-white/40 rounded-full flex items-center justify-center backdrop-blur-sm border border-white/30 text-white text-2xl select-none"
-                      onPointerDown={() => handleMobileMoveStart('left')}
-                      onPointerUp={() => handleMobileMoveEnd('left')}
-                      onPointerLeave={() => handleMobileMoveEnd('left')}
+                    <div 
+                      className="w-24 h-24 bg-white/10 rounded-full border-2 border-white/30 relative flex items-center justify-center touch-none cursor-pointer"
+                      onPointerDown={handleMovePointerDown}
+                      onPointerMove={handleMovePointerMove}
+                      onPointerUp={handleMovePointerUp}
+                      onPointerLeave={handleMovePointerUp}
+                      onPointerCancel={handleMovePointerUp}
                     >
-                      ←
-                    </button>
-                    <button
-                      className="w-16 h-16 bg-white/20 active:bg-white/40 rounded-full flex items-center justify-center backdrop-blur-sm border border-white/30 text-white text-2xl select-none"
-                      onPointerDown={() => handleMobileMoveStart('right')}
-                      onPointerUp={() => handleMobileMoveEnd('right')}
-                      onPointerLeave={() => handleMobileMoveEnd('right')}
-                    >
-                      →
-                    </button>
+                      <span className="text-white/50 text-xs font-bold pointer-events-none select-none text-center">
+                        MOVE
+                      </span>
+                      <div className="absolute w-10 h-10 bg-white/40 rounded-full pointer-events-none" />
+                    </div>
                   </div>
 
                   {/* Right Side: Jump and Aim */}
