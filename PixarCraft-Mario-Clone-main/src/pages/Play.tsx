@@ -3078,14 +3078,26 @@ export default function App() {
 
   const [moveJoyActive, setMoveJoyActive] = useState(false);
   const moveJoyCenter = useRef({ x: 0, y: 0 });
+  const [moveJoyKnob, setMoveJoyKnob] = useState({ x: 0, y: 0 });
 
   const updateMoveFromPointer = (e: React.PointerEvent<HTMLDivElement>) => {
     const dx = e.clientX - moveJoyCenter.current.x;
     const dy = e.clientY - moveJoyCenter.current.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
     
+    // Visually clamp the knob to a maximum radius
+    const maxRadius = 30;
+    const clampedDist = Math.min(dist, maxRadius);
+    const angle = Math.atan2(dy, dx);
+    const knobX = Math.cos(angle) * clampedDist;
+    const knobY = Math.sin(angle) * clampedDist;
+    
     if (dist > 10) {
+      setMoveJoyKnob({ x: knobX, y: knobY });
       const moveDirX = dx / dist;
+      const moveDirY = dy / dist;
+      
+      // Horizontal movement
       if (moveDirX > 0.3) {
         keysRef.current['KeyD'] = true;
         keysRef.current['KeyA'] = false;
@@ -3096,9 +3108,24 @@ export default function App() {
         keysRef.current['KeyA'] = false;
         keysRef.current['KeyD'] = false;
       }
+      
+      // Vertical jump
+      if (moveDirY < -0.5) {
+        if (!keysRef.current['KeyW']) {
+          keysRef.current['KeyW'] = true;
+          keysRef.current['Space'] = true;
+          triggerJump();
+        }
+      } else {
+        keysRef.current['KeyW'] = false;
+        keysRef.current['Space'] = false;
+      }
     } else {
+      setMoveJoyKnob({ x: 0, y: 0 });
       keysRef.current['KeyA'] = false;
       keysRef.current['KeyD'] = false;
+      keysRef.current['KeyW'] = false;
+      keysRef.current['Space'] = false;
     }
   };
 
@@ -3119,14 +3146,11 @@ export default function App() {
   const handleMovePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     e.currentTarget.releasePointerCapture(e.pointerId);
     setMoveJoyActive(false);
+    setMoveJoyKnob({ x: 0, y: 0 });
     keysRef.current['KeyA'] = false;
     keysRef.current['KeyD'] = false;
-  };
-
-  const handleMobileJumpStart = () => {
-    keysRef.current['KeyW'] = true;
-    keysRef.current['Space'] = true;
-    triggerJump();
+    keysRef.current['KeyW'] = false;
+    keysRef.current['Space'] = false;
   };
   const handleMobileJumpEnd = () => {
     keysRef.current['KeyW'] = false;
@@ -3250,26 +3274,18 @@ export default function App() {
                       onPointerLeave={handleMovePointerUp}
                       onPointerCancel={handleMovePointerUp}
                     >
-                      <span className="text-white/50 text-xs font-bold pointer-events-none select-none text-center">
-                        MOVE
+                      <span className="text-white/50 text-xs font-bold pointer-events-none select-none text-center absolute inset-0 flex items-center justify-center">
+                        MOVE / JUMP
                       </span>
-                      <div className="absolute w-10 h-10 bg-white/40 rounded-full pointer-events-none" />
+                      <div 
+                        className="absolute w-12 h-12 bg-white/50 backdrop-blur-md rounded-full pointer-events-none shadow-lg border border-white/40"
+                        style={{ transform: `translate(${moveJoyKnob.x}px, ${moveJoyKnob.y}px)` }}
+                      />
                     </div>
                   </div>
 
-                  {/* Right Side: Jump and Aim */}
+                  {/* Right Side: Aim Joystick (Jump removed) */}
                   <div className="flex gap-6 items-end pointer-events-auto">
-                    <button
-                      className="w-16 h-16 bg-blue-500/40 active:bg-blue-500/60 rounded-full flex items-center justify-center backdrop-blur-sm border border-blue-400/50 text-white font-bold select-none mb-8 cursor-pointer touch-none"
-                      onPointerDown={() => handleMobileJumpStart()}
-                      onPointerUp={() => handleMobileJumpEnd()}
-                      onPointerLeave={() => handleMobileJumpEnd()}
-                      onTouchStart={(e) => { e.preventDefault(); handleMobileJumpStart(); }}
-                      onTouchEnd={(e) => { e.preventDefault(); handleMobileJumpEnd(); }}
-                    >
-                      Jump
-                    </button>
-                    
                     {/* Aim Joystick Area */}
                     <div 
                       className="w-24 h-24 bg-red-500/20 rounded-full border-2 border-red-500/30 relative flex items-center justify-center touch-none"
