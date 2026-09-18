@@ -3256,29 +3256,32 @@ export default function App() {
         <div className="flex flex-col lg:flex-row gap-6">
           {/* Game Canvas Container */}
             <div ref={gameContainerRef} className={`bg-zinc-800 relative overflow-hidden flex items-center justify-center ${isFullscreen ? 'w-screen h-screen rounded-none border-none p-0' : 'flex-1 p-2 rounded-xl shadow-2xl border border-zinc-700'}`}>
-              {/* Pause/Play Toggle Button */}
-              {!showConfig && (
-                <button 
-                  onClick={() => setIsPlaying(!isPlaying)}
-                  onMouseUp={(e) => e.currentTarget.blur()}
-                  onKeyDown={(e) => e.preventDefault()}
-                  className="absolute top-4 right-4 bg-zinc-900/60 hover:bg-zinc-900/90 text-white p-2 rounded-lg backdrop-blur-sm transition-all z-20 border border-white/10"
-                  title={isPlaying ? "עצור" : "המשך"}
-                >
-                  {isPlaying ? <Pause size={24} /> : <Play size={24} />}
-                </button>
-              )}
+              {/* Top Right Controls Container */}
+              <div className="absolute top-4 right-4 z-20 flex items-center gap-2" dir="ltr">
+                {/* Pause/Play Toggle Button */}
+                {!showConfig && (
+                  <button 
+                    onClick={() => setIsPlaying(!isPlaying)}
+                    onMouseUp={(e) => e.currentTarget.blur()}
+                    onKeyDown={(e) => e.preventDefault()}
+                    className="bg-zinc-900/60 hover:bg-zinc-900/90 text-white p-2 rounded-lg backdrop-blur-sm transition-all border border-white/10 cursor-pointer touch-none"
+                    title={isPlaying ? "עצור" : "המשך"}
+                  >
+                    {isPlaying ? <Pause size={24} /> : <Play size={24} />}
+                  </button>
+                )}
 
-              {/* Fullscreen Toggle Button */}
-              <button
-                onPointerDown={(e) => { e.preventDefault(); toggleFullscreen(); }}
-                onTouchStart={(e) => { e.preventDefault(); toggleFullscreen(); }}
-                onClick={(e) => { e.preventDefault(); toggleFullscreen(); }}
-                className="absolute top-4 left-4 bg-zinc-900/60 hover:bg-zinc-900/90 text-white p-2 rounded-lg backdrop-blur-sm transition-all z-20 border border-white/10 cursor-pointer touch-none"
-                title={isFullscreen ? "צא ממסך מלא" : "מסך מלא"}
-              >
-                {isFullscreen ? <Minimize size={24} /> : <Maximize size={24} />}
-              </button>
+                {/* Fullscreen Toggle Button */}
+                <button
+                  onPointerDown={(e) => { e.preventDefault(); toggleFullscreen(); }}
+                  onTouchStart={(e) => { e.preventDefault(); toggleFullscreen(); }}
+                  onClick={(e) => { e.preventDefault(); toggleFullscreen(); }}
+                  className="bg-zinc-900/60 hover:bg-zinc-900/90 text-white p-2 rounded-lg backdrop-blur-sm transition-all border border-white/10 cursor-pointer touch-none"
+                  title={isFullscreen ? "צא ממסך מלא" : "מסך מלא"}
+                >
+                  {isFullscreen ? <Minimize size={24} /> : <Maximize size={24} />}
+                </button>
+              </div>
 
               <canvas
                 ref={canvasRef}
