@@ -3041,6 +3041,18 @@ export default function App() {
 
   const handleMobileJumpStart = () => {
     keysRef.current['KeyW'] = true;
+    if (playerRef.current && configRef.current) {
+      if (playerRef.current.airplaneTimer <= 0) {
+        if (playerRef.current.isGrounded) {
+          playerRef.current.vy = configRef.current.environment === 'water' ? -8 : DEFAULT_JUMP_FORCE;
+          playerRef.current.isGrounded = false;
+          playerRef.current.canDoubleJump = configRef.current.powerUp === 'doubleJump';
+        } else if (playerRef.current.canDoubleJump) {
+          playerRef.current.vy = configRef.current.environment === 'water' ? -8 : DEFAULT_JUMP_FORCE;
+          playerRef.current.canDoubleJump = false;
+        }
+      }
+    }
   };
   const handleMobileJumpEnd = () => {
     keysRef.current['KeyW'] = false;
