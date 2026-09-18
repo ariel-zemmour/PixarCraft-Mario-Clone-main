@@ -1077,10 +1077,10 @@ export default function App() {
       p.vx = 0;
     }
 
-    // Continuous firing for automatic weapons while Left Mouse Button is held
+    // Continuous firing for automatic weapons while Left Mouse Button is held (or any weapon on phone)
     if (isMouseDownRef.current) {
       const weapon = WEAPONS.find(w => w.id === configRef.current.weapon);
-      if (isWeaponAutomatic(weapon)) {
+      if (weapon && (isWeaponAutomatic(weapon) || configRef.current.platform === 'phone')) {
         fireWeapon();
       }
     }
@@ -3086,6 +3086,7 @@ export default function App() {
   // --- Mobile Touch Controls Logic ---
   const [aimJoyActive, setAimJoyActive] = useState(false);
   const aimJoyCenter = useRef({ x: 0, y: 0 });
+  const [aimJoyKnob, setAimJoyKnob] = useState({ x: 0, y: 0 });
 
   const [moveJoyActive, setMoveJoyActive] = useState(false);
   const moveJoyCenter = useRef({ x: 0, y: 0 });
@@ -3196,6 +3197,7 @@ export default function App() {
   const handleAimPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     e.currentTarget.releasePointerCapture(e.pointerId);
     setAimJoyActive(false);
+    setAimJoyKnob({ x: 0, y: 0 });
     isMouseDownRef.current = false;
   };
 
@@ -3203,6 +3205,14 @@ export default function App() {
     const dx = e.clientX - aimJoyCenter.current.x;
     const dy = e.clientY - aimJoyCenter.current.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
+    
+    const maxRadius = 30;
+    if (dist > maxRadius) {
+      setAimJoyKnob({ x: (dx / dist) * maxRadius, y: (dy / dist) * maxRadius });
+    } else {
+      setAimJoyKnob({ x: dx, y: dy });
+    }
+
     
     const p = playerRef.current;
     if (dist > 10) {
@@ -3320,7 +3330,10 @@ export default function App() {
                       onPointerUp={handleAimPointerUp}
                       onPointerCancel={handleAimPointerUp}
                     >
-                      <div className={`w-10 h-10 bg-red-500/50 rounded-full absolute transition-opacity ${aimJoyActive ? 'opacity-100' : 'opacity-50'}`} />
+                      <div 
+                        className={`w-10 h-10 bg-red-500/50 rounded-full absolute transition-opacity ${aimJoyActive ? 'opacity-100' : 'opacity-50'}`} 
+                        style={{ transform: `translate(${aimJoyKnob.x}px, ${aimJoyKnob.y}px)` }}
+                      />
                       <div className="absolute -top-6 text-white/50 text-xs tracking-widest font-bold">AIM & FIRE</div>
                     </div>
                   </div>
