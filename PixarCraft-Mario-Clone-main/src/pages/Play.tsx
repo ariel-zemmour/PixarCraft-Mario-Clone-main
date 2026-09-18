@@ -3287,15 +3287,8 @@ export default function App() {
                 ref={canvasRef}
                 width={800}
                 height={400}
-                className={`bg-black block ${(isPlaying && config.platform !== 'phone') ? 'cursor-crosshair' : 'cursor-default'} ${isFullscreen ? '' : 'rounded-lg'}`}
-                style={{ 
-                  aspectRatio: '800/400', 
-                  touchAction: 'none',
-                  maxWidth: '100%',
-                  maxHeight: '100%',
-                  width: isFullscreen ? 'auto' : '100%',
-                  height: 'auto'
-                }}
+                className={`block ${(isPlaying && config.platform !== 'phone') ? 'cursor-crosshair' : 'cursor-default'} ${isFullscreen ? 'w-full h-full' : 'w-full h-auto rounded-lg bg-black'}`}
+                style={isFullscreen ? { touchAction: 'none' } : { aspectRatio: '800/400', touchAction: 'none' }}
                 onMouseDown={config.platform !== 'phone' ? onCanvasMouseDown : undefined}
                 onMouseMove={config.platform !== 'phone' ? onCanvasMouseMove : undefined}
               />
