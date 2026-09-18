@@ -41,10 +41,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Clean up large files before Pages deploy
-        run: rm -rf PixarCraft-Mario-Clone-main/dist/releases
+        run: rm -rf dist/releases
 
       - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
+        uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./PixarCraft-Mario-Clone-main/dist
