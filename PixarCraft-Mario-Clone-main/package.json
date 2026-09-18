@@ -41,7 +41,8 @@
     "publish": {
       "provider": "github",
       "owner": "ariel-zemmour",
-      "repo": "PixarCraft-Mario-Clone-main"
+      "repo": "PixarCraft-Mario-Clone-main",
+      "releaseType": "release"
     }
   },
   "devDependencies": {
