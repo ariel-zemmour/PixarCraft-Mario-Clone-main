@@ -3109,16 +3109,22 @@ export default function App() {
         keysRef.current['KeyD'] = false;
       }
       
-      // Vertical jump
+      // Vertical movement (Jump up / Fly down)
       if (moveDirY < -0.5) {
         if (!keysRef.current['KeyW']) {
           keysRef.current['KeyW'] = true;
           keysRef.current['Space'] = true;
           triggerJump();
         }
+        keysRef.current['KeyS'] = false;
+      } else if (moveDirY > 0.5) {
+        keysRef.current['KeyS'] = true;
+        keysRef.current['KeyW'] = false;
+        keysRef.current['Space'] = false;
       } else {
         keysRef.current['KeyW'] = false;
         keysRef.current['Space'] = false;
+        keysRef.current['KeyS'] = false;
       }
     } else {
       setMoveJoyKnob({ x: 0, y: 0 });
@@ -3126,6 +3132,7 @@ export default function App() {
       keysRef.current['KeyD'] = false;
       keysRef.current['KeyW'] = false;
       keysRef.current['Space'] = false;
+      keysRef.current['KeyS'] = false;
     }
   };
 
@@ -3151,6 +3158,7 @@ export default function App() {
     keysRef.current['KeyD'] = false;
     keysRef.current['KeyW'] = false;
     keysRef.current['Space'] = false;
+    keysRef.current['KeyS'] = false;
   };
   const handleMobileJumpEnd = () => {
     keysRef.current['KeyW'] = false;
