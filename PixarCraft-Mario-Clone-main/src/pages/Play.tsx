@@ -3041,21 +3041,18 @@ export default function App() {
 
   const handleMobileJumpStart = () => {
     keysRef.current['KeyW'] = true;
-    if (playerRef.current && configRef.current) {
-      if (playerRef.current.airplaneTimer <= 0) {
-        if (playerRef.current.isGrounded) {
-          playerRef.current.vy = configRef.current.environment === 'water' ? -8 : DEFAULT_JUMP_FORCE;
-          playerRef.current.isGrounded = false;
-          playerRef.current.canDoubleJump = configRef.current.powerUp === 'doubleJump';
-        } else if (playerRef.current.canDoubleJump) {
-          playerRef.current.vy = configRef.current.environment === 'water' ? -8 : DEFAULT_JUMP_FORCE;
-          playerRef.current.canDoubleJump = false;
-        }
-      }
-    }
+    keysRef.current['Space'] = true;
+    
+    // Dispatch a synthetic Spacebar press to exactly mimic PC controls
+    window.dispatchEvent(new KeyboardEvent('keydown', { 
+      code: 'Space', 
+      key: ' ',
+      bubbles: true 
+    }));
   };
   const handleMobileJumpEnd = () => {
     keysRef.current['KeyW'] = false;
+    keysRef.current['Space'] = false;
   };
 
   const handleAimPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -3193,10 +3190,12 @@ export default function App() {
                   {/* Right Side: Jump and Aim */}
                   <div className="flex gap-6 items-end pointer-events-auto">
                     <button
-                      className="w-16 h-16 bg-blue-500/40 active:bg-blue-500/60 rounded-full flex items-center justify-center backdrop-blur-sm border border-blue-400/50 text-white font-bold select-none mb-8"
+                      className="w-16 h-16 bg-blue-500/40 active:bg-blue-500/60 rounded-full flex items-center justify-center backdrop-blur-sm border border-blue-400/50 text-white font-bold select-none mb-8 cursor-pointer touch-none"
                       onPointerDown={() => handleMobileJumpStart()}
                       onPointerUp={() => handleMobileJumpEnd()}
                       onPointerLeave={() => handleMobileJumpEnd()}
+                      onTouchStart={(e) => { e.preventDefault(); handleMobileJumpStart(); }}
+                      onTouchEnd={(e) => { e.preventDefault(); handleMobileJumpEnd(); }}
                     >
                       Jump
                     </button>
