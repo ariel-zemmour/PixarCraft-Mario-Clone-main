@@ -592,8 +592,8 @@ export default function App() {
         return rnd < 0.6 ? 'spiders' : 'bats';
       }
       
-      if (rnd < 0.65) return config.enemy;
-      const otherEnemies = ALL_ENEMIES.filter(e => e !== config.enemy);
+      if (rnd < 0.65) return configRef.current.enemy; // BUG #10 FIX: was config.enemy (stale in initLevel)
+      const otherEnemies = ALL_ENEMIES.filter(e => e !== configRef.current.enemy);
       return otherEnemies[Math.floor(rnd * 100) % otherEnemies.length];
     };
 
@@ -881,19 +881,15 @@ export default function App() {
 
   // Unified fire weapon handler using equipped weapon stats and cooldown
   const fireWeapon = () => {
-    console.log('[fireWeapon] called. isPlayingRef.current=', isPlayingRef.current);
-    if (!isPlayingRef.current) { console.log('[fireWeapon] BLOCKED: not playing'); return false; }
+    if (!isPlayingRef.current) { return false; }
     const now = Date.now();
     const weaponId = configRef.current.weapon;
     const weapon = WEAPONS.find(w => w.id === weaponId);
-    console.log('[fireWeapon] weaponId=', weaponId, 'weapon=', weapon?.name);
-    if (!weapon) { console.log('[fireWeapon] BLOCKED: weapon not found'); return false; }
+    if (!weapon) { return false; }
 
     const timeSince = now - lastShotRef.current;
-    console.log('[fireWeapon] timeSince=', timeSince, 'cooldown=', weapon.cooldown);
     if (timeSince < weapon.cooldown) {
-      console.log('[fireWeapon] BLOCKED: on cooldown, need', weapon.cooldown - timeSince, 'ms more');
-      return false;
+        return false;
     }
 
     lastShotRef.current = now;
@@ -907,7 +903,6 @@ export default function App() {
     const dx = targetX - startX;
     const dy = targetY - startY;
     const angle = Math.atan2(dy, dx);
-    console.log('[fireWeapon] FIRING! bullets before=', bulletsRef.current.length, 'angle=', angle.toFixed(2));
 
     if (weapon.count > 1) {
       for (let i = 0; i < weapon.count; i++) {
@@ -932,7 +927,6 @@ export default function App() {
         vy: Math.sin(angle) * weapon.speed 
       });
     }
-    console.log('[fireWeapon] bullets after=', bulletsRef.current.length);
 
     // Add muzzle flash and smoke for fast/machine weapons
     const isMachineGun = weapon.cooldown < 200;
@@ -1025,16 +1019,14 @@ export default function App() {
   // ─── Canvas Mouse Handlers (defined as component functions, fresh every render) ─
   // These are passed directly as JSX props — no stale-closure risk.
   const onCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    console.log('[mousedown] button=', e.button, 'isPlayingRef=', isPlayingRef.current);
-    if (e.button !== 0) { console.log('[mousedown] IGNORED: not LMB'); return; }
-    if (!isPlayingRef.current) { console.log('[mousedown] IGNORED: not playing'); return; }
+    if (e.button !== 0) { return; }
+    if (!isPlayingRef.current) { return; }
     e.preventDefault();
 
     isMouseDownRef.current = true;
     hasFiredForCurrentClickRef.current = false;
 
     const rect = e.currentTarget.getBoundingClientRect();
-    console.log('[mousedown] rect=', rect.width, 'x', rect.height);
     if (rect.width > 0 && rect.height > 0) {
       const cx = (e.clientX - rect.left) * (800 / rect.width);
       const cy = (e.clientY - rect.top)  * (400 / rect.height);
@@ -1044,10 +1036,8 @@ export default function App() {
       };
       playerRef.current.facingRight =
         mouseRef.current.x >= playerRef.current.x + playerRef.current.w / 2;
-      console.log('[mousedown] mouseRef set to', mouseRef.current);
-    }
+      }
 
-    console.log('[mousedown] calling fireWeapon()');
     fireWeapon();
   };
 
@@ -1076,7 +1066,7 @@ export default function App() {
     }
     
     const p = playerRef.current;
-    const currentMoveSpeed = config.speed * 1.2; // Increased base speed multiplier
+    const currentMoveSpeed = configRef.current.speed * 1.2; // BUG #6 FIX: was config.speed (stale React state) // Increased base speed multiplier
     
     if (p.airplaneTimer > 0) {
       p.airplaneTimer -= 16; // approx 60fps
@@ -1124,7 +1114,8 @@ export default function App() {
     }
     
     // Dash powerup
-    if (config.powerUp === 'dash' && keysRef.current['ShiftLeft']) {
+    if (configRef.current.powerUp === 'dash' && keysRef // BUG #7 FIX: was config.powerUp (stale)
+    if (configRef.current.powerUp === 'dash' && keysRef.current['ShiftLeft']) {
       p.vx *= 2;
     }
 
@@ -1225,7 +1216,7 @@ export default function App() {
               y: b.y,
               vx: (Math.random() - 0.5) * 4,
               vy: -2,
-              timer: 0,
+              timer: 400, // BUG #12 FIX: was 0
               size: 6,
               opacity: 0.8
             });
@@ -1240,7 +1231,7 @@ export default function App() {
                 y: b.y,
                 vx: (Math.random() - 0.5) * 5,
                 vy: (Math.random() - 0.5) * 5,
-                timer: 0,
+                timer: 400, // BUG #13 FIX: was 0
                 size: 4 + Math.random() * 3,
                 opacity: 0.9
               });
@@ -1318,7 +1309,7 @@ export default function App() {
       
       for (let i = 0; i < waveSize; i++) {
         const rnd = Math.random();
-        const eType: EnemyType = rnd < 0.6 ? config.enemy : ALL_ENEMIES[Math.floor(Math.random() * ALL_ENEMIES.length)];
+        const eType: EnemyType = rnd < 0.6 ? configRef.current.enemy : ALL_ENEMIES[Math.floor(Math.random() * ALL_ENEMIES.length)];
         const isGhost = eType === 'ghosts';
         const dims = getEnemyDimensions(eType);
         
@@ -1420,7 +1411,7 @@ export default function App() {
     // Remove dead enemies or enemies farther than 800px behind camera to maintain optimal 60 FPS
     if (enemiesRef.current.length > 25) {
       enemiesRef.current = enemiesRef.current.filter(
-        e => !e.dead && (e.x >= cameraRef.current.x - 800)
+        e => !e.dead && e.x >= cameraRef.current.x - 800 && e.x <= cameraRef.current.x + 2000 // BUG #11 FIX: also cull far-ahead enemies
       );
     }
     
@@ -1429,7 +1420,7 @@ export default function App() {
       if (enemy.dead) return;
       if (Math.abs(enemy.x - p.x) > 2000) return;
 
-      const eType = (enemy.subType || config.enemy) as EnemyType;
+      const eType = (enemy.subType || configRef.current.enemy) as EnemyType; // BUG #9 FIX
 
       if (eType === 'ghosts') {
         // Ghosts fly towards player in 2D
@@ -2132,7 +2123,7 @@ export default function App() {
     collectiblesRef.current.forEach(c => {
       if (c.collected) return;
       if (c.x + c.w < drawStartX || c.x > drawEndX) return;
-      if (config.collectible === 'coins') {
+      if (configRef.current.collectible === 'coins') { // BUG #8 FIX: was config.collectible (stale)
         // Gold Coin
         ctx.fillStyle = '#FFD700';
         ctx.beginPath();
@@ -2146,7 +2137,7 @@ export default function App() {
         ctx.textBaseline = 'middle';
         ctx.fillText('🐻', c.x + c.w/2, c.y + c.h/2 + 2);
         ctx.restore();
-      } else if (config.collectible === 'diamonds') {
+      } else if (configRef.current.collectible === 'diamonds') {
         // Beautiful Diamond
         ctx.fillStyle = '#00FFFF';
         ctx.beginPath();
@@ -2273,7 +2264,7 @@ export default function App() {
     enemiesRef.current.forEach(e => {
       if (e.dead) return;
       if (e.x + e.w < drawStartX || e.x > drawEndX) return;
-      const eType = (e.subType || config.enemy) as EnemyType;
+      const eType = (e.subType || configRef.current.enemy) as EnemyType; // BUG #9 FIX: was config.enemy (stale)
       if (eType === 'slimes') {
         ctx.fillStyle = 'rgba(0, 255, 0, 0.85)';
         ctx.beginPath();
@@ -2504,7 +2495,7 @@ export default function App() {
 
     // Draw Enemy Bullets
     enemyBulletsRef.current.forEach(b => {
-      ctx.fillStyle = (b.subType || config.enemy) === 'skeletons' ? '#A0A0A0' : '#FF0000';
+      ctx.fillStyle = (b.subType || configRef.current.enemy) === 'skeletons' // BUG #9 FIX ? '#A0A0A0' : '#FF0000';
       ctx.fillRect(b.x, b.y, b.w, b.h);
     });
     

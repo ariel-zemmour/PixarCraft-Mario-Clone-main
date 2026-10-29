@@ -217,7 +217,7 @@ class SaveService {
       if (this.pendingSave) {
         const next = this.pendingSave;
         this.pendingSave = null;
-        this.performCloudSave(next, force);
+        await this.performCloudSave(next, force); // BUG #16 FIX: was missing await (floating promise, errors unhandled)
       }
     }
   }

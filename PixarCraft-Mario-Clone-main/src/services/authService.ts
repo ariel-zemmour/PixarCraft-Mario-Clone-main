@@ -34,12 +34,18 @@ export const authService = {
   },
 
   async getCurrentUser(): Promise<{ user: User | null; save: GameSaveData | null }> {
-    // Wait for auth to initialize if we don't know the state yet, but don't block forever
-    if (auth.currentUser === null && this.getToken() === 'firebase-auth') {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-    }
-    
-    const firebaseUser = auth.currentUser || currentFirebaseUser;
+    // BUG #15 FIX: replaced the blind 1-second setTimeout with a proper
+    // onAuthStateChanged promise. Resolves as soon as Firebase knows the auth
+    // state (usually <100ms) and never blocks longer than 3 seconds.
+    const firebaseUser = await new Promise<any>((resolve) => {
+      if (auth.currentUser !== null) { resolve(auth.currentUser); return; }
+      const timeoutId = setTimeout(() => resolve(currentFirebaseUser), 3000);
+      const unsub = (auth as any).onAuthStateChanged((u: any) => {
+        clearTimeout(timeoutId);
+        unsub();
+        resolve(u);
+      });
+    });
     
     if (!firebaseUser) {
       this.clearToken();
