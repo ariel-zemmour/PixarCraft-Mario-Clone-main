@@ -24,15 +24,15 @@ export function Layout() {
               <Home className="w-4 h-4" />
               <span>Home</span>
             </Link>
-            <a href="https://github.com/ariel-zemmour/PixarCraft-Mario-Clone-main/releases/latest/download/Mario-Clone-Setup.exe" download="Mario-Clone-Setup.exe" className={`flex items-center space-x-1 hover:text-white transition-colors text-zinc-400`}>
+            <Link to="/" className={`flex items-center space-x-1 hover:text-white transition-colors text-zinc-400`}>
               <Download className="w-4 h-4" />
-              <span>Download</span>
-            </a>
+              <span>Download App</span>
+            </Link>
             <Link to="/account" className={`flex items-center space-x-1 hover:text-white transition-colors ${location.pathname === '/account' ? 'text-white' : 'text-zinc-400'}`}>
               <User className="w-4 h-4" />
               <span>Account</span>
             </Link>
-            <Link to="/play" className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors">
+            <Link to="/play" className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors font-bold shadow-lg shadow-blue-900/30">
               <Gamepad2 className="w-4 h-4" />
               <span>Play in Browser</span>
             </Link>
@@ -49,7 +49,7 @@ export function Layout() {
           <p>© {new Date().getFullYear()} PixarCraft Mario Clone. All rights reserved.</p>
           <div className="flex space-x-4 mt-4 md:mt-0">
             <Link to="/" className="hover:text-zinc-300">Home</Link>
-            <a href="https://github.com/ariel-zemmour/PixarCraft-Mario-Clone-main/releases/latest/download/Mario-Clone-Setup.exe" download="Mario-Clone-Setup.exe" className="hover:text-zinc-300">Download</a>
+            <Link to="/" className="hover:text-zinc-300">Download (Windows / Mac / Mobile)</Link>
           </div>
         </div>
       </footer>

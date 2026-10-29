@@ -21,6 +21,8 @@ import { ConflictModal } from '../components/ConflictModal';
 import { UserMenu } from '../components/UserMenu';
 import { SaveIndicator } from '../components/SaveIndicator';
 import { VictoryModal } from '../components/VictoryModal';
+import { detectDevicePlatform } from '../services/deviceDetection';
+import { DownloadMenu } from '../components/DownloadMenu';
 
 // --- Weapon Definitions ---
 interface WeaponInfo {
@@ -203,6 +205,12 @@ export default function App() {
     }
   }, []);
 
+  // Auto-detect device platform on page load
+  useEffect(() => {
+    const detected = detectDevicePlatform();
+    setConfig(prev => (prev.platform !== detected ? { ...prev, platform: detected } : prev));
+  }, []);
+
   const [config, setConfig] = useState<GameConfig>(() => {
     const local = saveService.getLocalSave();
     const loaded = local.config || {
@@ -214,11 +222,8 @@ export default function App() {
       platform: 'computer'
     };
     
-    // Automatically default and lock platform if in specific environments
-    if (lockedPlatform) {
-      loaded.platform = lockedPlatform;
-    }
-    
+    // Auto-detect device platform on load (PC vs. Mobile)
+    loaded.platform = detectDevicePlatform();
     return loaded;
   });
   
@@ -3410,84 +3415,19 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Platform Selection */}
-              {!lockedPlatform && (
-                <div className="space-y-3">
-                  <label className="block text-sm font-medium text-zinc-300">
-                    איך אתה משחק?
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {(['computer', 'phone'] as const).map(p => (
-                      <button
-                        key={p}
-                        onClick={() => setConfig({...config, platform: p})}
-                        className={`py-2 px-1 rounded-lg text-sm border transition-colors ${
-                          (config.platform || 'computer') === p 
-                            ? 'bg-purple-500/20 border-purple-500 text-purple-300' 
-                            : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-500'
-                        }`}
-                      >
-                        {p === 'computer' ? '💻 מחשב' : '📱 טלפון'}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              
+                            {/* Redesigned Download Options Menu (Dedicated Windows, Mac, Mobile buttons) */}
               {!hideDownloads && (
-                <div className="mt-4 space-y-4">
-                  {(!config.platform || config.platform === 'computer') && (
-                    <div className="flex flex-col gap-3">
-                      <div className="grid grid-cols-2 gap-2">
-                        <a
-                          href={windowsDownloadUrl}
-                          className="flex flex-col items-center justify-center gap-1 py-3 px-2 bg-blue-700 hover:bg-blue-600 text-white rounded-xl transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 font-bold text-sm"
-                        >
-                          <Download size={20} />
-                          <span>🪟 Windows</span>
-                        </a>
-                        <a
-                          href={macDownloadUrl}
-                          className="flex flex-col items-center justify-center gap-1 py-3 px-2 bg-zinc-600 hover:bg-zinc-500 text-white rounded-xl transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 font-bold text-sm"
-                        >
-                          <Download size={20} />
-                          <span>🍎 Mac</span>
-                        </a>
-                      </div>
-                      <p className="text-xs text-zinc-400 text-center leading-relaxed">
-                        האפליקציה מתעדכנת אוטומטית כשיש גרסה חדשה.<br/>
-                        <span className="text-emerald-400">🔄 תמיד תהיה לך הגרסה האחרונה!</span>
-                      </p>
-                    </div>
-                  )}
-                  
-                  {config.platform === 'phone' && (
-                    <div className="flex flex-col gap-3">
-                      <button 
-                        onClick={handleInstallClick}
-                        className={`w-full flex items-center justify-center gap-2 py-4 px-4 text-white rounded-xl transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 text-lg font-bold ${
-                          deferredPrompt
-                            ? 'bg-emerald-600 hover:bg-emerald-500 animate-pulse'
-                            : 'bg-blue-600 hover:bg-blue-500'
-                        }`}
-                      >
-                        <Smartphone size={24} />
-                        <span>{deferredPrompt ? '📲 התקן עכשיו!' : 'להוריד לטלפון'}</span>
-                      </button>
-                      <p className="text-xs text-zinc-400 text-center leading-relaxed">
-                        {deferredPrompt
-                          ? '✅ המשחק מוכן להתקנה! לחץ כדי להוסיף למסך הבית.'
-                          : 'ℹ️ אם אין כפתור, פתח את תפריט הדפדפן ובחר "הוסף למסך הבית".'}
-                        <br />
-                        <span className="text-emerald-400">🔄 המשחק מתעדכן אוטומטית כשיש שינויים!</span>
-                      </p>
-                    </div>
-                  )}
+                <div className="mt-4 space-y-3 border-t border-zinc-700/60 pt-4">
+                  <DownloadMenu 
+                    compact={true} 
+                    deferredPrompt={deferredPrompt}
+                    onInstallPWA={handleInstallClick}
+                  />
 
                   {updateStatus?.status === 'downloaded' && (
                     <button 
                       onClick={() => (window as any).updateAPI?.applyUpdate()}
-                      className="w-full mt-3 flex flex-col items-center justify-center gap-1 py-3 px-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-colors text-sm font-bold animate-pulse shadow-lg"
+                      className="w-full mt-2 flex flex-col items-center justify-center gap-1 py-3 px-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-colors text-sm font-bold animate-pulse shadow-lg"
                     >
                       <span>עדכון חדש מוכן! לחץ להפעלה מחדש</span>
                     </button>
