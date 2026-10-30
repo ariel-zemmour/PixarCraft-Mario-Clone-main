@@ -1119,8 +1119,7 @@ export default function App() {
     }
     
     // Dash powerup
-    if (configRef.current.powerUp === 'dash' && keysRef // BUG #7 FIX: was config.powerUp (stale)
-    if (configRef.current.powerUp === 'dash' && keysRef.current['ShiftLeft']) {
+        if (configRef.current.powerUp === 'dash' && keysRef.current['ShiftLeft']) {
       p.vx *= 2;
     }
 
