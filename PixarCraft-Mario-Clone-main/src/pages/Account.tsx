@@ -65,8 +65,8 @@ export function AccountPage() {
               <Cloud className="w-5 h-5 text-green-400 flex-shrink-0" />
               <span>שמירה בענן פעילה. ההתקדמות שלך מסונכרנת ומאובטחת בכל המכשירים.</span>
             </div>
-            
-            <button 
+
+            <button
               onClick={handleLogout}
               className="w-full flex items-center justify-center gap-2 bg-red-600/10 hover:bg-red-600/20 text-red-400 py-3 rounded-xl border border-red-500/20 transition-colors mt-8 font-bold"
             >
@@ -78,8 +78,8 @@ export function AccountPage() {
       ) : (
         <div className="text-center text-zinc-400 max-w-md">
           <p>עליך להתחבר כדי לגשת לשמירה בענן.</p>
-          <AuthModal 
-            isOpen={authModalOpen} 
+          <AuthModal
+            isOpen={authModalOpen}
             onClose={handleCloseAuth}
             onSuccess={(user) => {
               setCurrentUser(user);
