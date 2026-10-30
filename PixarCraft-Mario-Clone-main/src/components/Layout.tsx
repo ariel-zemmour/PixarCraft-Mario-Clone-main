@@ -5,36 +5,36 @@ import { Download, Gamepad2, User, Home } from 'lucide-react';
 export function Layout() {
   const location = useLocation();
   
-  // Hide navbar/footer if in game
+  // הסתרת תפריט עליון/תחתון בעת משחק ישיר
   if (location.pathname === '/play') {
     return <Outlet />;
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans" dir="rtl">
       <nav className="border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-          <Link to="/" className="flex items-center space-x-2 text-xl font-bold hover:text-blue-400 transition-colors">
+          <Link to="/" className="flex items-center gap-2 text-xl font-bold hover:text-blue-400 transition-colors">
             <Gamepad2 className="w-6 h-6 text-blue-500" />
-            <span>Mario Clone</span>
+            <span>משחק אריאל</span>
           </Link>
           
-          <div className="flex items-center space-x-6 text-sm font-medium">
-            <Link to="/" className={`flex items-center space-x-1 hover:text-white transition-colors ${location.pathname === '/' ? 'text-white' : 'text-zinc-400'}`}>
+          <div className="flex items-center gap-6 text-sm font-medium">
+            <Link to="/" className={`flex items-center gap-1.5 hover:text-white transition-colors ${location.pathname === '/' ? 'text-white' : 'text-zinc-400'}`}>
               <Home className="w-4 h-4" />
-              <span>Home</span>
+              <span>דף הבית</span>
             </Link>
-            <Link to="/" className={`flex items-center space-x-1 hover:text-white transition-colors text-zinc-400`}>
+            <Link to="/" className="flex items-center gap-1.5 hover:text-white transition-colors text-zinc-400">
               <Download className="w-4 h-4" />
-              <span>Download App</span>
+              <span>הורדת המשחק</span>
             </Link>
-            <Link to="/account" className={`flex items-center space-x-1 hover:text-white transition-colors ${location.pathname === '/account' ? 'text-white' : 'text-zinc-400'}`}>
+            <Link to="/account" className={`flex items-center gap-1.5 hover:text-white transition-colors ${location.pathname === '/account' ? 'text-white' : 'text-zinc-400'}`}>
               <User className="w-4 h-4" />
-              <span>Account</span>
+              <span>חשבון</span>
             </Link>
-            <Link to="/play" className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors font-bold shadow-lg shadow-blue-900/30">
+            <Link to="/play" className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors font-bold shadow-lg shadow-blue-900/30">
               <Gamepad2 className="w-4 h-4" />
-              <span>Play in Browser</span>
+              <span>שחק עכשיו בדפדפן</span>
             </Link>
           </div>
         </div>
@@ -45,11 +45,12 @@ export function Layout() {
       </main>
 
       <footer className="border-t border-zinc-800 bg-zinc-950 py-8 text-center text-zinc-500 text-sm">
-        <div className="max-w-6xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center">
-          <p>© {new Date().getFullYear()} PixarCraft Mario Clone. All rights reserved.</p>
-          <div className="flex space-x-4 mt-4 md:mt-0">
-            <Link to="/" className="hover:text-zinc-300">Home</Link>
-            <Link to="/" className="hover:text-zinc-300">Download (Windows / Mac / Mobile)</Link>
+        <div className="max-w-6xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-4">
+          <p>© {new Date().getFullYear()} PixarCraft משחק מריו אריאל. כל הזכויות שמורות.</p>
+          <div className="flex items-center gap-6">
+            <Link to="/" className="hover:text-zinc-300">דף הבית</Link>
+            <Link to="/" className="hover:text-zinc-300">הורדות (Windows / Mac / נייד)</Link>
+            <Link to="/play" className="hover:text-zinc-300">משחק בדפדפן</Link>
           </div>
         </div>
       </footer>

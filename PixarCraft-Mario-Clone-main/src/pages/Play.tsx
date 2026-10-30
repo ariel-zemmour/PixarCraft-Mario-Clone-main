@@ -3003,7 +3003,7 @@ export default function App() {
 
     ctx.fillStyle = 'black';
     ctx.font = 'bold 20px "JetBrains Mono", monospace';
-    ctx.fillText(`Score: ${scoreRef.current}`, 20, 30);
+    ctx.fillText(`?????: ${scoreRef.current}`, 20, 30);
     
     ctx.fillStyle = '#FFD700';
     const currencyName = config.collectible === 'coins' ? 'מטבעות' : config.collectible === 'diamonds' ? 'יהלומים' : 'ארנבים';
@@ -3722,11 +3722,11 @@ export default function App() {
       {/* Auto Updater Overlay */}
       {updateStatus && updateStatus.status !== 'not-available' && (
         <div className="fixed bottom-4 right-4 bg-zinc-900 border border-zinc-700 p-4 rounded-xl shadow-2xl z-50 text-white max-w-sm">
-          {updateStatus.status === 'checking' && <p>Checking for updates...</p>}
-          {updateStatus.status === 'available' && <p>New update available: v{updateStatus.data}</p>}
+          {updateStatus.status === 'checking' && <p>???? ???????...</p>}
+          {updateStatus.status === 'available' && <p>????? ??? ????: ???? {updateStatus.data}</p>}
           {updateStatus.status === 'downloading' && (
             <div>
-              <p>Downloading update...</p>
+              <p>????? ????? ???...</p>
               <div className="w-full bg-zinc-700 h-2 mt-2 rounded-full overflow-hidden">
                 <div 
                   className="bg-blue-500 h-full transition-all duration-300"
@@ -3737,16 +3737,16 @@ export default function App() {
           )}
           {updateStatus.status === 'downloaded' && (
             <div>
-              <p>Update downloaded (v{updateStatus.data}).</p>
+              <p>?????? ???? ?????? (???? {updateStatus.data}).</p>
               <button 
                 className="mt-2 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded font-bold w-full"
                 onClick={() => (window as any).updateAPI.applyUpdate()}
               >
-                Restart and Apply
+                ???? ???? ???? ?????
               </button>
             </div>
           )}
-          {updateStatus.status === 'error' && <p className="text-red-400 text-sm">Update failed: {updateStatus.data}</p>}
+          {updateStatus.status === 'error' && <p className="text-red-400 text-sm">????? ??????: {updateStatus.data}</p>}
         </div>
       )}
     </div>
